@@ -1,0 +1,200 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/database/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+  SUPER_ADMIN @map("SUPER ADMIN")
+}
+
+model User {
+  id             String         @id @default(uuid()) @db.Uuid
+  firstName      String         @map("first_name")
+  lastName       String         @map("last_name")
+  avatarUrl      String?        @map("avatar_url")
+  avatarPublicId String?        @map("avatar_public_id")
+  role           Role
+  status         Boolean        @default(true)
+  email          String         @unique @db.Citext // sensitive case Ann@mail.com = ann@mail.com
+  password       String?
+  googleId       String?        @unique @map("google_id")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(2)
+  courses        Course[]
+  wishlists      Wishlist[]
+  cartItems      CartItem[]
+  purchases      Purchase[]
+  purchaseItems  PurchaseItem[]
+
+  @@map("users")
+}
+
+enum Category {
+  PROGRAMMING
+  BUSINESS
+  DESIGN
+  MARKETING
+  PERSONAL_DEVELOPMENT @map("PERSONAL DEVELOPMENT")
+  LANGUAGE
+}
+
+enum Level {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum AccessType {
+  LIFETIME
+  LIMITED
+}
+
+enum StatusCourse {
+  DRAFT
+  PUBLISHED
+  SUSPENDED
+  DELETED
+}
+
+model Course {
+  id                Int          @id @default(autoincrement())
+  instructorId      String       @map("instructor_id") @db.Uuid
+  category          Category
+  level             Level
+  title             String
+  description       String
+  price             Decimal      @db.Decimal(10, 2)
+  accessType        AccessType   @map("access_type")
+  accessDuration    Int?         @map("access_duration")
+  thumbnailUrl      String?      @map("thumbnail_url")
+  thumbnailPublicId String?      @map("thumbnail_public_id")
+  status            StatusCourse @default(DRAFT)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(2)
+
+  instructor    User           @relation(fields: [instructorId], references: [id])
+  wishlists     Wishlist[]
+  cartItems     CartItem[]
+  lessons       Lesson[]
+  purchaseItems PurchaseItem[]
+
+  @@map("courses")
+}
+
+model Wishlist {
+  id        String   @id @default(uuid()) @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  courseId  Int      @map("course_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(2)
+
+  student User   @relation(fields: [studentId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@map("wishlists")
+}
+
+model CartItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  courseId  Int      @map("course_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(2)
+
+  student User   @relation(fields: [studentId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@map("cart_items")
+}
+
+model Lesson {
+  id              Int     @id @default(autoincrement())
+  courseId        Int     @map("course_id")
+  title           String
+  videoUrl        String  @map("video_url")
+  videoPublicId   String? @map("video_public_id")
+  durationSeconds Int     @map("duration_seconds")
+  orderNo         Int     @map("order_no")
+
+  course           Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonProgresses LessonProgress[]
+
+  @@unique([courseId, orderNo])
+  @@map("lessons")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model Purchase {
+  id            String        @id @default(uuid()) @db.Uuid
+  studentId     String        @map("student_id") @db.Uuid
+  total         Decimal       @db.Decimal(10, 2)
+  paymentStatus PaymentStatus @default(PENDING) @map("payment_status")
+  purchasedAt   DateTime?     @map("purchased_at") @db.Timestamptz(2)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(2)
+
+  student       User           @relation(fields: [studentId], references: [id])
+  purchaseItems PurchaseItem[]
+
+  @@map("purchases")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  EXPIRED
+  REFUNDED
+}
+
+model PurchaseItem {
+  id               String           @id @default(uuid()) @db.Uuid
+  purchaseId       String           @map("purchase_id") @db.Uuid
+  courseId         Int              @map("course_id")
+  studentId        String           @map("student_id") @db.Uuid
+  price            Decimal          @db.Decimal(10, 2)
+  expiresAt        DateTime?        @map("expires_at") @db.Timestamptz(2)
+  enrollmentStatus EnrollmentStatus @default(ACTIVE) @map("enrollment_status")
+
+  purchase         Purchase         @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  course           Course           @relation(fields: [courseId], references: [id])
+  student          User             @relation(fields: [studentId], references: [id])
+  lessonProgresses LessonProgress[]
+
+  @@unique([purchaseId, courseId])
+  @@index([studentId, courseId])
+  @@map("purchase_items")
+}
+
+model LessonProgress {
+  id                  String   @id @default(uuid()) @db.Uuid
+  purchaseItemId      String   @map("purchase_item_id") @db.Uuid
+  lessonId            Int      @map("lesson_id")
+  lastPositionSeconds Int      @default(0) @map("last_position_seconds")
+  maxWatchedSeconds   Int      @default(0) @map("max_watched_seconds")
+  isCompleted         Boolean  @default(false) @map("is_completed")
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(2)
+
+  purchaseItem PurchaseItem @relation(fields: [purchaseItemId], references: [id], onDelete: Cascade)
+  lesson       Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([purchaseItemId, lessonId])
+  @@map("lesson_progress")
+}

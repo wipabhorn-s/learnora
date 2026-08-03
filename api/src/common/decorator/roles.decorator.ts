@@ -1,0 +1,11 @@
+// api\src\common\decorator\roles.decorator.ts
+
+import { Role } from '@/database/generated/prisma/enums';
+import { SetMetadata } from '@nestjs/common';
+
+export const ROLES_KEY = 'ROLES';
+
+// ...roles = รับได้หลายตัว เช่น @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+export function Roles(...role: Role[]) {
+  return SetMetadata(ROLES_KEY, role);
+}

@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# env — ห้ามขึ้น git
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+
+# docs (เก็บไว้ในเครื่อง ไม่ขึ้น repo)
+/docs/
+
+# AI / editor tooling
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
