@@ -10,12 +10,15 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { loginAction } from "@/lib/actions/auth.action";
+import {
+  loginAction,
+  resendVerificationAction,
+} from "@/lib/actions/auth.action";
 import { LoginInput, loginSchema } from "@/lib/schemas/auth.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, MailCheck } from "lucide-react";
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 export default function LoginForm() {
@@ -34,12 +37,30 @@ export default function LoginForm() {
 
   const [isPending, startTransition] = useTransition();
 
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
+
   const onSubmit = (data: LoginInput) => {
     startTransition(async () => {
+      setResendNotice(null);
       const result = await loginAction(data);
-      if (result?.code === "INVALID_CREDENTIALS") {
-        setError("root", { message: result.message });
-      }
+
+      if (!result) return;
+
+      // เคสนี้แก้ได้ด้วยตัวเอง จึงยื่นปุ่มส่งลิงก์ใหม่ให้ตรงนั้นเลย
+      setUnverifiedEmail(
+        result.code === "EMAIL_NOT_VERIFIED" ? data.email : null,
+      );
+      setError("root", { message: result.message });
+    });
+  };
+
+  const onResend = () => {
+    if (!unverifiedEmail) return;
+
+    startTransition(async () => {
+      const result = await resendVerificationAction(unverifiedEmail);
+      setResendNotice(result.message);
     });
   };
 
@@ -62,6 +83,23 @@ export default function LoginForm() {
             >
               <AlertCircle />
               <AlertTitle>{errors.root.message}</AlertTitle>
+              {unverifiedEmail && (
+                <button
+                  type="button"
+                  onClick={onResend}
+                  disabled={isPending}
+                  className="mt-1 text-left text-sm font-semibold underline underline-offset-2 disabled:opacity-60"
+                >
+                  Send the verification link again
+                </button>
+              )}
+            </Alert>
+          )}
+
+          {resendNotice && (
+            <Alert className="border-primary/30 bg-secondary">
+              <MailCheck />
+              <AlertTitle>{resendNotice}</AlertTitle>
             </Alert>
           )}
 

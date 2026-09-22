@@ -20,26 +20,72 @@ enum Role {
   SUPER_ADMIN @map("SUPER ADMIN")
 }
 
+/// role แยกผู้ใช้ทั่วไปออกจากผู้ดูแลระบบเท่านั้น ส่วนสิทธิ์ "สอน" อยู่ที่
+/// isInstructor ต่างหาก เพราะคนคนเดียวเป็นได้ทั้งผู้เรียนและผู้สอนพร้อมกัน
+/// (แบบ Udemy) ถ้าผูกไว้กับ role ผู้สอนจะซื้อและเรียนคอร์สคนอื่นไม่ได้เลย
 model User {
-  id             String         @id @default(uuid()) @db.Uuid
-  firstName      String         @map("first_name")
-  lastName       String         @map("last_name")
-  avatarUrl      String?        @map("avatar_url")
-  avatarPublicId String?        @map("avatar_public_id")
-  role           Role
-  status         Boolean        @default(true)
-  email          String         @unique @db.Citext // sensitive case Ann@mail.com = ann@mail.com
-  password       String?
-  googleId       String?        @unique @map("google_id")
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(2)
-  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(2)
-  courses        Course[]
-  wishlists      Wishlist[]
-  cartItems      CartItem[]
-  purchases      Purchase[]
-  purchaseItems  PurchaseItem[]
+  id              String         @id @default(uuid()) @db.Uuid
+  firstName       String         @map("first_name")
+  lastName        String         @map("last_name")
+  avatarUrl       String?        @map("avatar_url")
+  avatarPublicId  String?        @map("avatar_public_id")
+  role            Role
+  isInstructor    Boolean        @default(false) @map("is_instructor")
+  status          Boolean        @default(true)
+  email           String         @unique @db.Citext // sensitive case Ann@mail.com = ann@mail.com
+  /// null = ยังไม่ได้กดลิงก์ยืนยันในอีเมล -> ล็อกอินด้วยรหัสผ่านไม่ได้
+  /// บัญชีที่มาทาง Google ถือว่ายืนยันแล้วทันที เพราะ Google ยืนยันให้
+  emailVerifiedAt DateTime?      @map("email_verified_at") @db.Timestamptz(2)
+  password        String?
+  googleId        String?        @unique @map("google_id")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(2)
+
+  courses                 Course[]
+  wishlists               Wishlist[]
+  cartItems               CartItem[]
+  purchases               Purchase[]
+  purchaseItems           PurchaseItem[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
 
   @@map("users")
+}
+
+/// ลิงก์ยืนยันอีเมล ใช้ทั้งตอนสมัครและตอนขอเปลี่ยนอีเมล
+/// เก็บเฉพาะ sha256 ของ token ไม่เก็บตัวจริง คนที่หลุดเข้าฐานข้อมูลได้
+/// จึงเอาไปกดลิงก์แทนเจ้าของบัญชีไม่ได้ และ usedAt ทำให้ลิงก์ใช้ได้ครั้งเดียว
+model EmailVerificationToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  /// มีค่าเมื่อเป็นคำขอเปลี่ยนอีเมล = อีเมลใหม่ที่รอการยืนยัน
+  /// null = ยืนยันอีเมลปัจจุบันตอนสมัคร
+  pendingEmail String?   @map("pending_email") @db.Citext
+  tokenHash    String    @unique @map("token_hash")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(2)
+  usedAt       DateTime? @map("used_at") @db.Timestamptz(2)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(2)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verification_tokens")
+}
+
+/// ลิงก์ตั้งรหัสผ่านใหม่ — เก็บเป็น hash และใช้ได้ครั้งเดียวเหมือนกัน
+/// ต่างจาก JWT ตรงที่เพิกถอนได้ทันทีเมื่อถูกใช้ไปแล้ว
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(2)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(2)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(2)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 enum Category {

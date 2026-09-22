@@ -31,8 +31,20 @@ export async function apiFetch<T>(
   });
 
   if (!response.ok) {
-    const errorBody = await response.json();
-    throw new ApiError(response.status, errorBody.message);
+    // body ของ Nest เป็น { message, statusCode } ปกติ แต่ endpoint ที่ต้องให้
+    // ฝั่งเว็บแยกเคสได้จะแนบ code มาด้วย และบาง error (เช่น validation)
+    // ส่ง message มาเป็น array
+    const errorBody: unknown = await response.json().catch(() => null);
+    const { message, code } = (errorBody ?? {}) as {
+      message?: string | string[];
+      code?: string;
+    };
+
+    throw new ApiError(
+      response.status,
+      Array.isArray(message) ? message.join(', ') : (message ?? response.statusText),
+      code,
+    );
   }
 
   const text = await response.text();

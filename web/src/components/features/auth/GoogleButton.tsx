@@ -1,9 +1,24 @@
 import { Button } from "@/components/ui/button";
 import { loginWithGoogleAction } from "@/lib/actions/auth.action";
 
-export default function GoogleButton({ label }: { label: string }) {
+export default function GoogleButton({
+  label,
+  asInstructor = false,
+}: {
+  label: string;
+  /**
+   * ส่งไปพร้อมฟอร์มเพื่อให้เจตนา "สมัครเป็นผู้สอน" ไม่หายไประหว่างเด้งไป
+   * Google — server action จะเก็บลงคุกกี้ให้ก่อน redirect
+   */
+  asInstructor?: boolean;
+}) {
   return (
     <form action={loginWithGoogleAction}>
+      <input
+        type="hidden"
+        name="asInstructor"
+        value={asInstructor ? "true" : "false"}
+      />
       <Button type="submit" variant="outline" className="w-full py-5">
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path

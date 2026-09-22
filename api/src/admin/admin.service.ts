@@ -31,7 +31,8 @@ export class AdminService {
     const [totalStudents, totalInstructors, totalCourses, revenueAgg] =
       await Promise.all([
         this.prisma.user.count({ where: { role: Role.STUDENT } }),
-        this.prisma.user.count({ where: { role: Role.INSTRUCTOR } }),
+        // ผู้สอนนับจากสิทธิ์ ไม่ใช่ role เพราะคนคนเดียวเป็นได้ทั้งสองอย่าง
+        this.prisma.user.count({ where: { isInstructor: true } }),
         this.prisma.course.count({
           where: { status: { not: StatusCourse.DELETED } },
         }),
@@ -54,7 +55,8 @@ export class AdminService {
     const limit = dto.limit ?? 10;
 
     const where: Prisma.UserWhereInput = {
-      role: dto.role ?? { in: [Role.STUDENT, Role.INSTRUCTOR] },
+      role: Role.STUDENT,
+      ...(dto.isInstructor !== undefined && { isInstructor: dto.isInstructor }),
       ...(dto.search && {
         OR: [
           { firstName: { contains: dto.search, mode: 'insensitive' } },
@@ -76,6 +78,7 @@ export class AdminService {
           lastName: true,
           email: true,
           role: true,
+          isInstructor: true,
           status: true,
           createdAt: true,
         },

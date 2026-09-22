@@ -13,13 +13,10 @@ export default async function Navbar() {
   const session = await auth();
   const user = session?.user;
   let cartCount = 0;
-  const profileHref = !user
-    ? "/profile"
-    : user.role === "INSTRUCTOR"
-      ? "/instructor/profile"
-      : user.role === "ADMIN" || user.role === "SUPER_ADMIN"
-        ? "/admin/profile"
-        : "/profile";
+  const profileHref =
+    user?.role === "ADMIN" || user?.role === "SUPER_ADMIN"
+      ? "/admin/profile"
+      : "/profile";
 
   if (user?.role === "STUDENT") {
     try {
@@ -80,6 +77,7 @@ export default async function Navbar() {
                 firstName={user.firstName}
                 avatarUrl={user.avatarUrl}
                 role={user.role}
+                isInstructor={user.isInstructor}
               />
             </>
           ) : (

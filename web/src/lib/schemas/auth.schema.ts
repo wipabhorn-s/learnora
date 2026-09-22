@@ -10,7 +10,9 @@ export const registerSchema = z.object({
       /^[0-9a-zA-Z]{8,}$/,
       "Password must be at least 8 characters and contain only letters and numbers",
     ),
-  role: z.enum(["STUDENT", "INSTRUCTOR"]),
+  // แทน role เดิม — ทุกคนสมัครมาเป็นผู้ใช้ที่ซื้อและเรียนคอร์สได้เหมือนกัน
+  // ค่านี้บอกแค่ว่าเปิดสิทธิ์สอนให้ตั้งแต่แรกด้วยไหม เปลี่ยนทีหลังได้
+  isInstructor: z.boolean(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

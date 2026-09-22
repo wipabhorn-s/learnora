@@ -44,11 +44,15 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 - Review payments and issue refunds
 - Super admin: create and manage admin accounts
 
-### Auth
-- Email + password registration and login (JWT)
+### Auth and account security
+- Email + password registration with **mandatory email verification** — the
+  account cannot log in until the link in the inbox is clicked
 - Sign in with Google (OAuth via NextAuth, ID token verified server-side)
-- Forgot password / reset password with a short-lived reset token
-- Role-based access control: `STUDENT`, `INSTRUCTOR`, `ADMIN`, `SUPER ADMIN`
+- Forgot password / reset password with single-use, hashed tokens
+- **Login & security** settings: connect or disconnect Google, set a first
+  password, and change the email address (password + confirmation link required)
+- Roles: `STUDENT`, `ADMIN`, `SUPER ADMIN`. Teaching is a **capability**
+  (`isInstructor`), not a role, so one account can buy, learn and teach
 
 ---
 
@@ -58,6 +62,7 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 | --- | --- |
 | API | NestJS 11, TypeScript, Prisma 7, PostgreSQL |
 | Auth (API) | `@nestjs/jwt`, bcrypt, `google-auth-library` |
+| Mail | Brevo transactional email HTTP API |
 | Web | Next.js 16 (App Router, Server Actions), React 19, TypeScript |
 | Auth (web) | NextAuth v5 (Credentials + Google provider, JWT session) |
 | UI | Tailwind CSS 4, shadcn/ui, Base UI, lucide-react |
@@ -143,8 +148,16 @@ Fill in the values — see [Environment variables](#environment-variables).
 
 ```bash
 cd api
-pnpm exec prisma migrate dev     # create tables
+pnpm exec prisma db push         # create tables
 pnpm exec prisma generate        # generate the Prisma client
+```
+
+On a database that already holds users, run the backfill once so existing
+instructors keep their teaching rights and nobody is locked out by the new
+email verification gate:
+
+```bash
+psql "$DATABASE_URL" -f prisma/backfill-instructor-capability.sql
 ```
 
 > The schema uses the `citext` type for emails so that `Ann@mail.com` and
@@ -173,8 +186,11 @@ cd web && pnpm dev              # http://localhost:3000
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ACCESS_TOKEN_SECRET` | JWT signing secret, at least 32 characters |
 | `ACCESS_TOKEN_EXPIRES_IN` | Access token lifetime in seconds (e.g. `86400`) |
-| `RESET_TOKEN_SECRET` | Password-reset JWT secret, at least 32 characters |
-| `RESET_TOKEN_EXPIRES_IN` | Reset token lifetime in seconds (e.g. `900`) |
+| `FRONTEND_URL` | Base URL used to build the links sent by email |
+| `RESET_TOKEN_EXPIRES_IN` | Password-reset link lifetime in seconds (e.g. `900`) |
+| `EMAIL_VERIFICATION_TOKEN_EXPIRES_IN` | Verification link lifetime in seconds (e.g. `86400`) |
+| `BREVO_API_KEY` | Brevo API key — optional, but sending email fails with 503 without it |
+| `MAIL_FROM` / `MAIL_FROM_NAME` | Sender address (must be verified in Brevo) and display name |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID — must match the one used by the web app |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Cloudinary credentials |
 | `STRIPE_SECRET_KEY` | Stripe secret key |
@@ -190,6 +206,7 @@ refuses to start if anything is missing or malformed.
 | `AUTH_SECRET` | NextAuth session encryption secret |
 | `NEXTAUTH_URL` | Public URL of the web app (e.g. `http://localhost:3000`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth client credentials |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same client ID, exposed to the browser for the connect-account button |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key |
 
 > Both apps must use the **same** `GOOGLE_CLIENT_ID`: the web app obtains the Google
@@ -207,8 +224,12 @@ User ──< Purchase ──< PurchaseItem >── Course
 Course ──< Lesson ──< LessonProgress >── PurchaseItem
 ```
 
-- **User** — `role`, `status` (suspended flag), optional `password` (null for
-  Google-only accounts) and optional `googleId`.
+- **User** — `role` (regular user vs. admin), `isInstructor` (teaching
+  capability), `status` (suspended flag), `emailVerifiedAt`, optional `password`
+  (null for Google-only accounts) and optional `googleId`.
+- **EmailVerificationToken / PasswordResetToken** — single-use links. Only a
+  sha256 hash of each token is stored, and `pendingEmail` holds the address
+  waiting to be confirmed during an email change.
 - **Course** — category, level, price, access type (`LIFETIME` / `LIMITED` with a
   duration), publishing status.
 - **Purchase / PurchaseItem** — an order and its lines; a `PurchaseItem` is the
@@ -232,7 +253,9 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | POST | `/auth/login` | Log in, returns `access_token` + user |
 | POST | `/auth/google` | Exchange a Google ID token for an access token |
 | GET | `/auth/profile` | Current user (requires auth) |
-| POST | `/auth/forgot-password` | Request a password-reset token |
+| POST | `/auth/verify-email` | Confirm a signup or an email change |
+| POST | `/auth/resend-verification` | Send the verification link again |
+| POST | `/auth/forgot-password` | Request a password-reset link |
 | POST | `/auth/reset-password` | Set a new password with a reset token |
 
 ### Users — `/users`
@@ -241,7 +264,13 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | PATCH | `/users/me` | Update first/last name |
 | PATCH | `/users/me/avatar` | Upload an avatar (multipart) |
 | DELETE | `/users/me/avatar` | Remove the avatar |
-| PATCH | `/users/me/password` | Change password |
+| PATCH | `/users/me/password` | Change password (requires the current one) |
+| GET | `/users/me/security` | Login methods overview for the settings page |
+| POST | `/users/me/password` | Set a first password (Google-only accounts) |
+| POST | `/users/me/google` | Connect a Google account (verified ID token) |
+| DELETE | `/users/me/google` | Disconnect Google (blocked without a password) |
+| POST | `/users/me/email-change` | Request an email change (password required) |
+| POST | `/users/me/instructor` | Enable teaching; returns a refreshed access token |
 
 ### Courses — `/courses`
 | Method | Path | Description |
@@ -312,9 +341,22 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
    new `STUDENT` account.
 4. The API returns its own access token, which is stored in the session as above.
 
-**Password reset** — `POST /auth/forgot-password` issues a short-lived reset JWT;
-`POST /auth/reset-password` verifies it and stores the new bcrypt hash. The endpoint
-always answers with the same message so that registered emails cannot be enumerated.
+**Email verification** — registration stores the account with `emailVerifiedAt`
+null and emails a link. Logging in with a password is refused until it is
+clicked. Accounts created through Google are verified on the spot, because
+Google already proved ownership of the address.
+
+**Password reset** — `POST /auth/forgot-password` issues a random token, stores
+only its sha256 hash, and emails the link; `POST /auth/reset-password` checks the
+hash, writes the new bcrypt hash and marks the token used so the link cannot be
+replayed. The endpoint always answers with the same message so that registered
+emails cannot be enumerated.
+
+**Roles vs. capabilities** — `role` only separates regular users from admins.
+Teaching lives in `isInstructor`, checked by `InstructorGuard` and carried in the
+access token, so a single account can buy courses, study them and publish its
+own. Enabling it returns a fresh access token, since the old one still claims
+`isInstructor: false`.
 
 ---
 

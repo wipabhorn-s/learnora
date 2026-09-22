@@ -3,6 +3,8 @@
 import ChangePasswordForm from "@/components/features/profile/ChangePasswordForm";
 import AvatarUploadDialog from "@/components/features/profile/AvatarUploadDialog";
 import ProfileInfoForm from "@/components/features/profile/ProfileInfoForm";
+import LoginSecurityPanel from "@/components/features/security/LoginSecurityPanel";
+import { SecurityOverview } from "@/lib/api/api.type";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState } from "react";
@@ -10,7 +12,10 @@ import { useState } from "react";
 const SECTIONS = [
   { key: "personal", label: "Personal Information" },
   { key: "password", label: "Change Password" },
+  { key: "security", label: "Login & Security" },
 ] as const;
+
+type SectionKey = (typeof SECTIONS)[number]["key"];
 
 export default function ProfileView({
   firstName,
@@ -18,14 +23,16 @@ export default function ProfileView({
   email,
   role,
   avatarUrl,
+  security,
 }: {
   firstName: string;
   lastName: string;
   email: string;
   role: string;
   avatarUrl: string | null;
+  security: SecurityOverview | null;
 }) {
-  const [section, setSection] = useState<"personal" | "password">("personal");
+  const [section, setSection] = useState<SectionKey>("personal");
 
   return (
     <>
@@ -61,7 +68,10 @@ export default function ProfileView({
           </Card>
 
           <Card className="gap-0 overflow-hidden py-0">
-            {SECTIONS.map((s) => (
+            {SECTIONS.filter(
+              // บัญชีที่ยังไม่มีรหัสผ่านจะตั้งรหัสจากแท็บ Login & Security แทน
+              (s) => s.key !== "password" || security?.hasPassword !== false,
+            ).map((s) => (
               <button
                 type="button"
                 key={s.key}
@@ -79,15 +89,27 @@ export default function ProfileView({
         </div>
 
         <div className="min-w-0">
-          {section === "personal" ? (
+          {section === "personal" && (
             <ProfileInfoForm
               firstName={firstName}
               lastName={lastName}
               email={email}
             />
-          ) : (
+          )}
+
+          {section === "password" && (
             <ChangePasswordForm onSuccess={() => setSection("personal")} />
           )}
+
+          {section === "security" &&
+            (security ? (
+              <LoginSecurityPanel security={security} />
+            ) : (
+              <Card className="p-6 text-sm text-muted-foreground">
+                We could not load your security settings right now. Please
+                refresh the page.
+              </Card>
+            ))}
         </div>
       </div>
     </>

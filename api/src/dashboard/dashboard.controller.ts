@@ -1,4 +1,5 @@
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
+import { Instructor } from '@/common/decorator/instructor.decorator';
 import { Roles } from '@/common/decorator/roles.decorator';
 import { DashboardService } from '@/dashboard/dashboard.service';
 import { FindStudentDashboardDto } from '@/dashboard/dto/find-student-dashboard.dto';
@@ -21,7 +22,7 @@ export class DashboardController {
     );
   }
 
-  @Roles(Role.INSTRUCTOR)
+  @Instructor()
   @Get('instructor')
   getInstructorDashboard(@CurrentUser('sub') userId: string) {
     return this.dashboardService.getInstructorDashboard(userId);

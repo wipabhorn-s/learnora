@@ -1,12 +1,13 @@
 // api\src\auth\dto\register.dto.ts
 
 import { Trim } from '@/common/decorator/trim.decorator';
-import { Role } from '@/database/generated/prisma/enums';
+import { Type } from 'class-transformer';
 import {
   IsAlphanumeric,
+  IsBoolean,
   IsEmail,
-  IsIn,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
@@ -34,8 +35,13 @@ export class RegisterDto {
   @IsAlphanumeric()
   password: string;
 
-  @IsNotEmpty()
-  @IsString()
-  @IsIn([Role.STUDENT, Role.INSTRUCTOR])
-  role: Role;
+  /**
+   * แทน role เดิม — ทุกคนสมัครมาเป็นผู้ใช้ทั่วไปที่ซื้อและเรียนคอร์สได้
+   * ค่านี้บอกแค่ว่าเปิดสิทธิ์สอนให้ตั้งแต่แรกด้วยหรือไม่ และเปลี่ยนทีหลัง
+   * ได้จากหน้า settings
+   */
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isInstructor?: boolean;
 }

@@ -22,10 +22,24 @@ export const AuthApi = {
     });
   },
 
-  loginWithGoogle(idToken: string) {
+  loginWithGoogle(idToken: string, asInstructor = false) {
     return apiFetch<LoginResponse>("/auth/google", {
       method: "POST",
-      body: { idToken },
+      body: { idToken, asInstructor },
+    });
+  },
+
+  verifyEmail(token: string) {
+    return apiFetch<{ message: string }>("/auth/verify-email", {
+      method: "POST",
+      body: { token },
+    });
+  },
+
+  resendVerification(email: string) {
+    return apiFetch<{ message: string }>("/auth/resend-verification", {
+      method: "POST",
+      body: { email },
     });
   },
 

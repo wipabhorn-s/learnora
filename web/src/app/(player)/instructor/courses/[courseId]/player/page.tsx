@@ -12,7 +12,7 @@ export default async function InstructorCoursePlayerPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (session.user.role !== "INSTRUCTOR") redirect("/");
+  if (!session.user.isInstructor) redirect("/");
 
   const { courseId: courseIdParam } = await params;
   const courseId = Number(courseIdParam);

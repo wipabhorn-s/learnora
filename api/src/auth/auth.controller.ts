@@ -5,7 +5,9 @@ import { ForgotPasswordDto } from '@/auth/dto/forgot-password.dto';
 import { GoogleLoginDto } from '@/auth/dto/google-login.dto';
 import { LoginDto } from '@/auth/dto/login.dto';
 import { RegisterDto } from '@/auth/dto/register.dto';
+import { ResendVerificationDto } from '@/auth/dto/resend-verification.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
+import { VerifyEmailDto } from '@/auth/dto/verify-email.dto';
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
 import { Protected, Public } from '@/common/decorator/public.decorator';
 import {
@@ -25,7 +27,9 @@ export class AuthController {
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     await this.authService.register(registerDto);
-    return { message: 'Register successfully' };
+    return {
+      message: 'Register successfully. Check your inbox to verify your email.',
+    };
   }
 
   @HttpCode(HttpStatus.OK)
@@ -44,6 +48,18 @@ export class AuthController {
   @Get('profile')
   getCurrentUser(@CurrentUser('sub') userId: string) {
     return this.authService.getProfile(userId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('verify-email')
+  verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('resend-verification')
+  resendVerification(@Body() resendVerificationDto: ResendVerificationDto) {
+    return this.authService.resendVerification(resendVerificationDto);
   }
 
   @HttpCode(HttpStatus.OK)

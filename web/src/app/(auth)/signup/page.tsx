@@ -10,7 +10,6 @@ export default async function SignupPage({
   searchParams: Promise<{ role?: string }>;
 }) {
   const { role } = await searchParams;
-  const initialRole = role === "INSTRUCTOR" ? "INSTRUCTOR" : "STUDENT";
 
   return (
     <>
@@ -27,7 +26,7 @@ export default async function SignupPage({
         </p>
       </div>
 
-      <SignupForm initialRole={initialRole} />
+      <SignupForm initialAsInstructor={role === "INSTRUCTOR"} />
     </>
   );
 }

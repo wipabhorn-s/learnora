@@ -7,7 +7,9 @@ declare module "next-auth" {
     firstName: string;
     lastName: string;
     email: string;
-    role: "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPER_ADMIN";
+    role: "STUDENT" | "ADMIN" | "SUPER_ADMIN";
+    // สิทธิ์สอนแยกจาก role เพราะผู้ใช้คนเดียวเป็นได้ทั้งผู้เรียนและผู้สอน
+    isInstructor: boolean;
     avatarUrl: string | null;
     access_token: string;
   }
@@ -23,7 +25,8 @@ declare module "next-auth/jwt" {
     firstName: string;
     lastName: string;
     email: string;
-    role: "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPER_ADMIN";
+    role: "STUDENT" | "ADMIN" | "SUPER_ADMIN";
+    isInstructor: boolean;
     avatarUrl: string | null;
     access_token: string;
   }

@@ -1,6 +1,5 @@
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
-import { Roles } from '@/common/decorator/roles.decorator';
-import { Role } from '@/database/generated/prisma/enums';
+import { Instructor } from '@/common/decorator/instructor.decorator';
 import { CreateLessonDto } from '@/lesson/dto/create-lesson.dto';
 import { MoveLessonDto } from '@/lesson/dto/move-lesson.dto';
 import { UpdateLessonDto } from '@/lesson/dto/update-lesson.dto';
@@ -19,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
-@Roles(Role.INSTRUCTOR)
+@Instructor()
 @Controller('lessons')
 export class LessonController {
   constructor(private readonly lessonService: LessonService) {}

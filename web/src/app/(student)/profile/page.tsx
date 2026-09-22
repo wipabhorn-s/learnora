@@ -1,4 +1,5 @@
 import ProfileView from "@/components/features/profile/ProfileView";
+import { getSecurityOverviewAction } from "@/lib/actions/security.action";
 import { auth } from "@/lib/auth";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -10,6 +11,7 @@ export default async function ProfilePage() {
   if (!session) redirect("/login");
 
   const { firstName, lastName, email, role, avatarUrl } = session.user;
+  const security = await getSecurityOverviewAction();
 
   return (
     <ProfileView
@@ -18,6 +20,7 @@ export default async function ProfilePage() {
       email={email}
       role={role}
       avatarUrl={avatarUrl}
+      security={security}
     />
   );
 }

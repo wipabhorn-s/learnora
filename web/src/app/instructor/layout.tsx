@@ -33,7 +33,9 @@ export default async function InstructorLayout({
   const session = await auth();
 
   if (!session) redirect("/login");
-  if (session.user.role !== "INSTRUCTOR") redirect("/");
+  // ผู้เรียนที่ยังไม่เปิดสิทธิ์สอนส่งไปหน้า settings ให้กดเปิดเองได้เลย
+  // ดีกว่าเด้งกลับหน้าแรกแล้วไม่บอกว่าต้องทำอะไร
+  if (!session.user.isInstructor) redirect("/profile");
 
   return (
     <div className="flex min-h-screen bg-background">

@@ -1,11 +1,10 @@
 // api\src\user\types\user.type.ts
 
-import { Role } from '@/database/generated/prisma/enums';
-
 export type UserCreateInput = {
   firstName: string;
   lastName: string;
   email: string;
   password: string;
-  role: Role;
+  // ผู้สมัครกดเลือก "Register as Instructor" ไว้ตั้งแต่หน้าสมัคร
+  isInstructor: boolean;
 };

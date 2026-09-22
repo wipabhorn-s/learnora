@@ -44,9 +44,13 @@ export default async function StudentLayout({
   if (!session) redirect("/login");
   if (session.user.role !== "STUDENT") redirect("/");
 
+  const ITEMS_FOR_USER: SidebarItem[] = session.user.isInstructor
+    ? [...ITEMS, { label: "Teaching", href: "/instructor/dashboard", icon: "create-course" }]
+    : ITEMS;
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar items={ITEMS} />
+      <Sidebar items={ITEMS_FOR_USER} />
       <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 xl:p-8">
         {children}
       </main>

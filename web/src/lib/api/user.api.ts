@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/api/api-fetch";
-import { UserResponse } from "@/lib/api/api.type";
+import { SecurityOverview, UserResponse } from "@/lib/api/api.type";
 import {
+  ChangeEmailInput,
   ChangePasswordInput,
   UpdateProfileInput,
 } from "@/lib/schemas/user.schema";
@@ -35,5 +36,49 @@ export const UserApi = {
       method: "DELETE",
       token,
     });
+  },
+
+  getSecurity(token: string) {
+    return apiFetch<SecurityOverview>("/users/me/security", {
+      token,
+      cache: "no-store",
+    });
+  },
+
+  setPassword(newPassword: string, token: string) {
+    return apiFetch<{ message: string }>("/users/me/password", {
+      method: "POST",
+      body: { newPassword },
+      token,
+    });
+  },
+
+  connectGoogle(idToken: string, token: string) {
+    return apiFetch<{ message: string }>("/users/me/google", {
+      method: "POST",
+      body: { idToken },
+      token,
+    });
+  },
+
+  disconnectGoogle(token: string) {
+    return apiFetch<{ message: string }>("/users/me/google", {
+      method: "DELETE",
+      token,
+    });
+  },
+
+  changeEmail(data: ChangeEmailInput, token: string) {
+    return apiFetch<{ message: string; pendingEmail: string }>(
+      "/users/me/email-change",
+      { method: "POST", body: data, token },
+    );
+  },
+
+  becomeInstructor(token: string) {
+    return apiFetch<{ message: string; access_token: string }>(
+      "/users/me/instructor",
+      { method: "POST", token },
+    );
   },
 };

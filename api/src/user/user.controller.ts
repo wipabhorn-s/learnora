@@ -1,5 +1,10 @@
+// api\src\user\user.controller.ts
+
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
+import { ChangeEmailDto } from '@/user/dto/change-email.dto';
 import { ChangePasswordDto } from '@/user/dto/change-password.dto';
+import { ConnectGoogleDto } from '@/user/dto/connect-google.dto';
+import { SetPasswordDto } from '@/user/dto/set-password.dto';
 import { UpdateProfileDto } from '@/user/dto/update-profile.dto';
 import { UserService } from '@/user/user.service';
 import {
@@ -7,7 +12,11 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
   Patch,
+  Post,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -48,5 +57,55 @@ export class UserController {
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
     return this.userService.changePassword(userId, changePasswordDto);
+  }
+
+  // --- หน้า Login & security ---
+
+  @Get('me/security')
+  getSecurityOverview(@CurrentUser('sub') userId: string) {
+    return this.userService.getSecurityOverview(userId);
+  }
+
+  /** ตั้งรหัสผ่านครั้งแรก สำหรับบัญชีที่สมัครมาทาง Google */
+  @HttpCode(HttpStatus.OK)
+  @Post('me/password')
+  setPassword(
+    @CurrentUser('sub') userId: string,
+    @Body() setPasswordDto: SetPasswordDto,
+  ) {
+    return this.userService.setPassword(userId, setPasswordDto.newPassword);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('me/google')
+  connectGoogle(
+    @CurrentUser('sub') userId: string,
+    @Body() connectGoogleDto: ConnectGoogleDto,
+  ) {
+    return this.userService.connectGoogleWithIdToken(
+      userId,
+      connectGoogleDto.idToken,
+    );
+  }
+
+  @Delete('me/google')
+  disconnectGoogle(@CurrentUser('sub') userId: string) {
+    return this.userService.disconnectGoogle(userId);
+  }
+
+  /** ส่งลิงก์ยืนยันไปที่อีเมลใหม่ ยังไม่เปลี่ยนจนกว่าจะกดยืนยัน */
+  @HttpCode(HttpStatus.OK)
+  @Post('me/email-change')
+  changeEmail(
+    @CurrentUser('sub') userId: string,
+    @Body() changeEmailDto: ChangeEmailDto,
+  ) {
+    return this.userService.changeEmail(userId, changeEmailDto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('me/instructor')
+  becomeInstructor(@CurrentUser('sub') userId: string) {
+    return this.userService.becomeInstructor(userId);
   }
 }

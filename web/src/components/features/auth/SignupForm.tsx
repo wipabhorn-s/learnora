@@ -15,12 +15,12 @@ import { SignupInput, signupSchema } from "@/lib/schemas/auth.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle } from "lucide-react";
 import { useTransition } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 
 export default function SignupForm({
-  initialRole = "STUDENT",
+  initialAsInstructor = false,
 }: {
-  initialRole?: "STUDENT" | "INSTRUCTOR";
+  initialAsInstructor?: boolean;
 }) {
   const {
     control,
@@ -35,7 +35,7 @@ export default function SignupForm({
       email: "",
       password: "",
       confirmPassword: "",
-      role: initialRole,
+      isInstructor: initialAsInstructor,
     },
   });
 
@@ -51,35 +51,37 @@ export default function SignupForm({
     });
   };
 
+  // ปุ่ม Google อยู่นอก <form> จึงอ่านค่าจากฟอร์มตรง ๆ ไม่ได้ ต้องติดตามค่าไว้
+  // เพื่อส่งเจตนาเดียวกันไปกับทั้งสองทาง (useWatch แทน watch เพราะ memo ได้)
+  const asInstructor = useWatch({ control, name: "isInstructor" });
+
   return (
     <div className="grid gap-6">
-      {/* ปุ่มเลือก Student / Instructor */}
+      {/* เลือกว่าจะเปิดสิทธิ์สอนให้ตั้งแต่แรกไหม — เปลี่ยนทีหลังได้ในหน้า settings */}
       <Controller
         control={control}
-        name="role"
+        name="isInstructor"
         render={({ field }) => (
           <div className="flex rounded-xl bg-muted p-1">
-            {(["STUDENT", "INSTRUCTOR"] as const).map((role) => (
+            {([false, true] as const).map((value) => (
               <button
-                key={role}
+                key={String(value)}
                 type="button"
-                onClick={() => field.onChange(role)}
+                onClick={() => field.onChange(value)}
                 className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-all ${
-                  field.value === role
+                  field.value === value
                     ? "bg-white text-primary shadow-sm"
                     : "text-muted-foreground"
                 }`}
               >
-                {role === "STUDENT"
-                  ? "Register as Student"
-                  : "Register as Instructor"}
+                {value ? "Register as Instructor" : "Register as Student"}
               </button>
             ))}
           </div>
         )}
       />
 
-      <GoogleButton label="Sign up with Google" />
+      <GoogleButton label="Sign up with Google" asInstructor={asInstructor} />
 
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
         <div className="h-px flex-1 bg-border" />

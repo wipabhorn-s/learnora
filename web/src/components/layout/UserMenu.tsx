@@ -4,11 +4,10 @@ import { logoutAction } from "@/lib/actions/auth.action";
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 
-type Role = "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPER_ADMIN";
+type Role = "STUDENT" | "ADMIN" | "SUPER_ADMIN";
 
 const DASHBOARD_ROUTES: Record<Role, string> = {
   STUDENT: "/dashboard",
-  INSTRUCTOR: "/instructor/dashboard",
   ADMIN: "/admin/dashboard",
   SUPER_ADMIN: "/admin/dashboard",
 };
@@ -17,15 +16,27 @@ export default function UserMenu({
   firstName,
   avatarUrl,
   role,
+  isInstructor = false,
 }: {
   firstName: string;
   avatarUrl: string | null;
   role: Role;
+  isInstructor?: boolean;
 }) {
   const dashboardHref = DASHBOARD_ROUTES[role];
 
   return (
     <div className="flex items-center gap-2">
+      {/* ผู้ใช้คนเดียวเป็นได้ทั้งผู้เรียนและผู้สอน จึงต้องมีทางสลับมุมมอง */}
+      {isInstructor && role === "STUDENT" && (
+        <Link
+          href="/instructor/dashboard"
+          className="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground sm:block"
+        >
+          Teaching
+        </Link>
+      )}
+
       <Link
         href={dashboardHref}
         aria-label="Open dashboard"
