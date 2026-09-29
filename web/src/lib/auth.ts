@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/api/api-error";
 import { AuthApi } from "@/lib/api/auth.api";
 import { UserResponse } from "@/lib/api/api.type";
+import { env } from "@/lib/env";
 import { loginSchema } from "@/lib/schemas/auth.schema";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import { JWT } from "next-auth/jwt";
@@ -71,8 +72,8 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     }),
 
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
     }),
   ],
 

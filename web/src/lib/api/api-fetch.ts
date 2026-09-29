@@ -1,11 +1,12 @@
 import { ApiError } from "@/lib/api/api-error";
+import { env } from "@/lib/env";
 
 export type ApiFetchOptions = Omit<RequestInit, "body"> & {
   body?: Record<string, unknown> | FormData;
   token?: string;
 };
 
-const API_URL = process.env.API_URL ?? "http://localhost:8000";
+const API_URL = env.API_URL;
 
 export async function apiFetch<T>(
   path: string,

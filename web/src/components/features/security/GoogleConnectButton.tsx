@@ -49,6 +49,8 @@ export default function GoogleConnectButton({
   onToken: (idToken: string) => void;
   disabled?: boolean;
 }) {
+  // อ่าน process.env ตรง ๆ ด้วยเหตุผลเดียวกับ lib/stripe.ts — component นี้
+  // เป็น "use client" จึง import lib/env.ts ไม่ได้
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   const containerRef = useRef<HTMLDivElement>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
