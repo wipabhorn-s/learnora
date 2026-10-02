@@ -9,18 +9,24 @@ import { ResendVerificationDto } from '@/auth/dto/resend-verification.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
 import { VerifyEmailDto } from '@/auth/dto/verify-email.dto';
 import { EmailVerificationTokenService } from '@/auth/email-verification-token.service';
+import { VerifyLoginCodeDto } from '@/auth/dto/verify-login-code.dto';
+import { ResendLoginCodeDto } from '@/auth/dto/resend-login-code.dto';
 import { GoogleAuthService } from '@/auth/google-auth.service';
+import { LoginAttemptService } from '@/auth/login-attempt.service';
+import { OneTimeCodeService } from '@/auth/one-time-code.service';
 import { ResetTokenService } from '@/auth/reset-token.service';
-import { Role } from '@/database/generated/prisma/enums';
+import { OtpPurpose, Role } from '@/database/generated/prisma/enums';
 import { MailService } from '@/infrastructure/mail/mail.service';
 import { BcryptService } from '@/infrastructure/hash/bcrypt.service';
 import { UserService } from '@/user/user.service';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 
@@ -34,6 +40,21 @@ import {
  */
 const INVALID_CREDENTIALS = 'Invalid email or password';
 
+/** ต้องตรงกับ RESEND_COOLDOWN_SECONDS ฝั่งเว็บ ที่นับถอยหลังบนปุ่ม */
+const RESEND_COOLDOWN_SECONDS = 30;
+
+/**
+ * ลิงก์ล่าสุดเพิ่งออกไปไม่ถึง 30 วินาที = ไม่ส่งเมลซ้ำ ผู้เรียกต้องตอบข้อความ
+ * เดิมเหมือนทุกกรณี ถ้าตอบ 429 จะกลายเป็นบอกคนนอกว่าอีเมลนี้มีบัญชีอยู่
+ * หน้าเว็บนับถอยหลังบนปุ่มเองอยู่แล้ว ผู้ใช้ปกติจึงไม่ชนเงื่อนไขนี้
+ */
+function isCoolingDown(lastIssuedAt: Date | null): boolean {
+  return (
+    lastIssuedAt !== null &&
+    Date.now() - lastIssuedAt.getTime() < RESEND_COOLDOWN_SECONDS * 1000
+  );
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -46,6 +67,8 @@ export class AuthService {
     private readonly emailVerificationTokenService: EmailVerificationTokenService,
     private readonly googleAuthService: GoogleAuthService,
     private readonly mailService: MailService,
+    private readonly oneTimeCodeService: OneTimeCodeService,
+    private readonly loginAttemptService: LoginAttemptService,
   ) {}
 
   private async issueSession(user: {
@@ -96,9 +119,13 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    // เช็กก่อนตรวจรหัสผ่าน: ระหว่างล็อกอยู่ใส่ถูกก็ไม่ผ่าน (ไม่งั้นเดาต่อได้)
+    this.loginAttemptService.assertNotLocked(dto.email);
+
     const user = await this.userService.findByEmail(dto.email);
 
     if (!user) {
+      this.loginAttemptService.recordFailure(dto.email);
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
@@ -118,8 +145,10 @@ export class AuthService {
     );
 
     if (!isMatch) {
+      this.loginAttemptService.recordFailure(dto.email);
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
+    this.loginAttemptService.reset(dto.email);
 
     if (!user.status) {
       throw new ForbiddenException({
@@ -137,7 +166,87 @@ export class AuthService {
       });
     }
 
+    // เปิด 2FA ไว้: รหัสผ่านถูกยังไม่พอ ส่งรหัส 6 หลักไปทางอีเมลก่อน แล้วค่อย
+    // ออก token ที่ /auth/login/code ตอบ 200 ไม่ใช่ 401 เพราะไม่ได้ผิดอะไร
+    // แค่ยังไม่จบขั้นตอน (และบอกคนนอกได้แค่ว่ารหัสผ่านถูก ซึ่งเขารู้อยู่แล้ว)
+    if (user.twoFactorEnabled) {
+      const challengeId = await this.sendLoginCode(user.id, user.email);
+      return { codeRequired: true as const, challengeId };
+    }
+
     return this.issueSession(user);
+  }
+
+  /**
+   * ส่งรหัสแบบต้องสำเร็จ ต่างจาก sendOrLog ที่กลืน error — ถ้าเมลไม่ออก
+   * ผู้ใช้จะนั่งรอรหัสที่ไม่มีวันมา ต้องบอกให้รู้ว่าลองใหม่
+   */
+  private async sendLoginCode(userId: string, email: string): Promise<string> {
+    const { id, code } = await this.oneTimeCodeService.issue(
+      userId,
+      OtpPurpose.LOGIN,
+    );
+
+    try {
+      await this.mailService.sendOneTimeCode(email, code, OtpPurpose.LOGIN);
+    } catch (error) {
+      this.logger.error(`ส่งรหัสล็อกอินไม่สำเร็จ (${userId})`, error);
+      throw new ServiceUnavailableException({
+        message: 'We could not send your verification code. Please try again.',
+        code: 'SERVICE_UNAVAILABLE',
+      });
+    }
+
+    return id;
+  }
+
+  async verifyLoginCode(dto: VerifyLoginCodeDto) {
+    const userId = await this.oneTimeCodeService.verify(
+      dto.challengeId,
+      dto.code,
+      OtpPurpose.LOGIN,
+    );
+    const user = await this.userService.findById(userId);
+
+    // ระหว่างรอใส่รหัส บัญชีอาจโดนระงับไปแล้ว
+    if (!user?.status) {
+      throw new ForbiddenException({
+        message: 'Your account has been suspended',
+        code: 'ACCOUNT_SUSPENDED',
+      });
+    }
+
+    return this.issueSession(user);
+  }
+
+  /** ส่งรหัสใหม่ คืน challengeId ใบใหม่ (ใบเก่าถูกทิ้งไปแล้ว) */
+  async resendLoginCode(dto: ResendLoginCodeDto) {
+    const pending = await this.oneTimeCodeService.findPending(
+      dto.challengeId,
+      OtpPurpose.LOGIN,
+    );
+
+    if (!pending) {
+      throw new BadRequestException({
+        message: 'Your login session has expired. Please log in again.',
+        code: 'OTP_SESSION_EXPIRED',
+      });
+    }
+
+    if (this.oneTimeCodeService.isCoolingDown(pending.createdAt)) {
+      throw new BadRequestException({
+        message: 'Please wait a moment before requesting another code.',
+        code: 'OTP_COOLDOWN',
+      });
+    }
+
+    const user = await this.userService.findById(pending.userId);
+    if (!user) {
+      throw new UnauthorizedException(INVALID_CREDENTIALS);
+    }
+
+    const challengeId = await this.sendLoginCode(user.id, user.email);
+    return { challengeId, message: 'A new code has been sent to your email' };
   }
 
   async getProfile(userId: string) {
@@ -189,6 +298,14 @@ export class AuthService {
       return { message };
     }
 
+    if (
+      isCoolingDown(
+        await this.emailVerificationTokenService.lastIssuedAt(user.id),
+      )
+    ) {
+      return { message };
+    }
+
     const token = await this.emailVerificationTokenService.issue(user.id);
     await this.sendOrLog(
       () => this.mailService.sendEmailVerification(user.email, token),
@@ -202,7 +319,10 @@ export class AuthService {
     const message = 'If the email exists, a reset link has been sent';
     const user = await this.userService.findByEmail(dto.email);
 
-    if (!user) {
+    if (
+      !user ||
+      isCoolingDown(await this.resetTokenService.lastIssuedAt(user.id))
+    ) {
       return { message };
     }
 
@@ -248,7 +368,10 @@ export class AuthService {
       // email_verified เป็น false ไปแล้ว — Google จึงยืนยันให้แล้วว่า
       // คนที่ล็อกอินอยู่เป็นเจ้าของอีเมลนี้จริง
       user = existing
-        ? await this.userService.linkGoogleAccount(existing.id, profile.googleId)
+        ? await this.userService.linkGoogleAccount(
+            existing.id,
+            profile.googleId,
+          )
         : await this.userService.createGoogleUser({
             ...profile,
             isInstructor: dto.asInstructor ?? false,

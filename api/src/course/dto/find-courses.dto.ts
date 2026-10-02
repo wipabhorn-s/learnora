@@ -1,7 +1,19 @@
 import { Trim } from '@/common/decorator/trim.decorator';
 import { AccessType, Category, Level } from '@/database/generated/prisma/enums';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
+
+/** ลำดับผลลัพธ์ในหน้าคอร์ส ค่าเริ่มต้น newest */
+export const COURSE_SORTS = ['newest', 'price-asc', 'price-desc'] as const;
+export type CourseSort = (typeof COURSE_SORTS)[number];
 
 export class FindCoursesDto {
   @IsOptional()
@@ -20,6 +32,10 @@ export class FindCoursesDto {
   @IsOptional()
   @IsEnum(AccessType)
   accessType?: AccessType;
+
+  @IsOptional()
+  @IsIn(COURSE_SORTS)
+  sort?: CourseSort;
 
   @IsOptional()
   @Type(() => Number)

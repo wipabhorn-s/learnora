@@ -1,9 +1,13 @@
 // api\src\user\user.controller.ts
 
+import { VerifyLoginCodeDto } from '@/auth/dto/verify-login-code.dto';
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
 import { ChangeEmailDto } from '@/user/dto/change-email.dto';
 import { ChangePasswordDto } from '@/user/dto/change-password.dto';
 import { ConnectGoogleDto } from '@/user/dto/connect-google.dto';
+import { DisableTwoFactorDto } from '@/user/dto/disable-two-factor.dto';
+import { DeleteAccountDto } from '@/user/dto/delete-account.dto';
+import { RequestDeleteCodeDto } from '@/user/dto/request-delete-code.dto';
 import { SetPasswordDto } from '@/user/dto/set-password.dto';
 import { UpdateProfileDto } from '@/user/dto/update-profile.dto';
 import { UserService } from '@/user/user.service';
@@ -104,8 +108,56 @@ export class UserController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @Post('me/two-factor/request')
+  requestEnableTwoFactor(@CurrentUser('sub') userId: string) {
+    return this.userService.requestEnableTwoFactor(userId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('me/two-factor/confirm')
+  confirmEnableTwoFactor(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: VerifyLoginCodeDto,
+  ) {
+    return this.userService.confirmEnableTwoFactor(
+      userId,
+      dto.challengeId,
+      dto.code,
+    );
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('me/two-factor/disable')
+  disableTwoFactor(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: DisableTwoFactorDto,
+  ) {
+    return this.userService.disableTwoFactor(userId, dto.password);
+  }
+
+  @HttpCode(HttpStatus.OK)
   @Post('me/instructor')
   becomeInstructor(@CurrentUser('sub') userId: string) {
     return this.userService.becomeInstructor(userId);
+  }
+
+  /** บัญชีที่ไม่มีรหัสผ่าน: ขอรหัสยืนยันการลบบัญชีทางอีเมล */
+  @HttpCode(HttpStatus.OK)
+  @Post('me/delete/request-code')
+  requestDeleteAccountCode(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: RequestDeleteCodeDto,
+  ) {
+    return this.userService.requestDeleteAccountCode(userId, dto.email);
+  }
+
+  /** ลบบัญชีตัวเอง ใช้ POST เพราะต้องส่งรหัสผ่าน/รหัสยืนยันใน body (DELETE ไม่ควรมี body) */
+  @HttpCode(HttpStatus.OK)
+  @Post('me/delete')
+  deleteAccount(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: DeleteAccountDto,
+  ) {
+    return this.userService.deleteAccount(userId, dto);
   }
 }

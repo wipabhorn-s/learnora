@@ -6,10 +6,13 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
+import { StringList } from '@/common/decorator/string-list.decorator';
 
 export class CreateCourseDto {
   @IsString()
@@ -17,10 +20,23 @@ export class CreateCourseDto {
   @Trim()
   title: string;
 
+  /** ส่งค่าว่างมา = ลบ subtitle */
+  @IsOptional()
+  @IsString()
+  @Trim()
+  @MaxLength(160)
+  subtitle?: string;
+
   @IsString()
   @IsNotEmpty()
   @Trim()
   description: string;
+
+  @StringList({ maxItems: 10, maxLength: 160 })
+  learningOutcomes?: string[];
+
+  @StringList({ maxItems: 10, maxLength: 160 })
+  requirements?: string[];
 
   @Type(() => Number)
   @IsNumber()

@@ -1,5 +1,5 @@
 import { Trim } from '@/common/decorator/trim.decorator';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsString()
@@ -11,4 +11,11 @@ export class UpdateProfileDto {
   @IsNotEmpty()
   @Trim()
   lastName: string;
+
+  /** ไม่ส่งมา = ไม่แก้ ส่งค่าว่าง = ลบ bio */
+  @IsOptional()
+  @IsString()
+  @Trim()
+  @MaxLength(1000)
+  bio?: string;
 }

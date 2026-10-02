@@ -1,5 +1,6 @@
+import { StrongPassword } from '@/common/decorator/strong-password.decorator';
 import { Trim } from '@/common/decorator/trim.decorator';
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
 export class CreateAdminDto {
   @IsString()
@@ -15,7 +16,6 @@ export class CreateAdminDto {
   @IsEmail()
   email: string;
 
-  @IsString()
-  @MinLength(8)
+  @StrongPassword()
   password: string;
 }

@@ -1,12 +1,14 @@
 import { CreateCourseDto } from '@/course/dto/create-course.dto';
-import { FindCoursesDto } from '@/course/dto/find-courses.dto';
+import { CourseSort, FindCoursesDto } from '@/course/dto/find-courses.dto';
 import { UpdateCourseStatusDto } from '@/course/dto/update-course-status.dto';
 import { UpdateCourseDto } from '@/course/dto/update-course.dto';
 import {
   AccessType,
+  EnrollmentStatus,
   PaymentStatus,
   StatusCourse,
 } from '@/database/generated/prisma/enums';
+import { Prisma } from '@/database/generated/prisma/client';
 import { PrismaService } from '@/database/prisma.service';
 import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
 import {
@@ -16,6 +18,29 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { pageCount, pageQuery } from '@/common/utils/pagination';
+
+/**
+ * ทุกแบบปิดท้ายด้วย id เพื่อให้ลำดับคงที่ตอนค่าเท่ากัน (ราคาเท่ากันหลายคอร์ส)
+ * ไม่งั้นคอร์สเดียวกันอาจโผล่ซ้ำหรือหายไปเวลาเปลี่ยนหน้า
+ */
+const COURSE_ORDER: Record<
+  CourseSort,
+  Prisma.CourseOrderByWithRelationInput[]
+> = {
+  newest: [{ createdAt: 'desc' }, { id: 'desc' }],
+  'price-asc': [{ price: 'asc' }, { id: 'desc' }],
+  'price-desc': [{ price: 'desc' }, { id: 'desc' }],
+};
+
+/**
+ * นับเฉพาะคนที่จ่ายสำเร็จ (คอร์สฟรีก็นับ) ไม่นับรายการที่ค้าง/คืนเงินแล้ว
+ * คืนเงินรายคอร์สได้ คำสั่งซื้อจึงยัง SUCCESS อยู่ ต้องดูสถานะของคอร์สด้วย
+ */
+const PAID_ENROLLMENT = {
+  purchase: { paymentStatus: PaymentStatus.SUCCESS },
+  enrollmentStatus: { not: EnrollmentStatus.REFUNDED },
+} satisfies Prisma.PurchaseItemWhereInput;
 
 @Injectable()
 export class CourseService {
@@ -75,11 +100,8 @@ export class CourseService {
       this.prisma.course.findMany({
         where,
         omit: { thumbnailPublicId: true },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        skip: (page - 1) * limit,
-        take: limit,
+        orderBy: COURSE_ORDER[dto.sort ?? 'newest'],
+        ...pageQuery(page, limit),
         include: {
           instructor: {
             select: {
@@ -100,7 +122,7 @@ export class CourseService {
       courses,
       total,
       page,
-      totalPages: Math.ceil(total / limit),
+      totalPages: pageCount(total, limit),
     };
   }
 
@@ -118,7 +140,7 @@ export class CourseService {
   async findMyCourse(instructorId: string, courseId: number) {
     await this.findOwnedCourse(instructorId, courseId);
 
-    return this.prisma.course.findUnique({
+    const course = await this.prisma.course.findUnique({
       where: { id: courseId },
       omit: { thumbnailPublicId: true },
       include: {
@@ -128,6 +150,7 @@ export class CourseService {
             courseId: true,
             title: true,
             videoUrl: true,
+            videoPublicId: true,
             durationSeconds: true,
             orderNo: true,
           },
@@ -135,6 +158,24 @@ export class CourseService {
         },
       },
     });
+    if (!course) return course;
+
+    // ผู้สอนดูตัวอย่างคอร์สตัวเองก็ได้ลิงก์ที่หมดอายุเหมือนผู้เรียน
+    return {
+      ...course,
+      lessons: course.lessons.map(({ videoPublicId, ...lesson }) => ({
+        ...lesson,
+        videoUrl: this.cloudinaryService.signedVideoUrl(
+          videoPublicId ??
+            this.cloudinaryService.getPublicIdFromUrl(
+              lesson.videoUrl,
+              'video',
+            ) ??
+            '',
+          lesson.videoUrl,
+        ),
+      })),
+    };
   }
 
   async findCourse(courseId: number) {
@@ -143,7 +184,12 @@ export class CourseService {
       omit: { thumbnailPublicId: true },
       include: {
         instructor: {
-          select: { firstName: true, lastName: true, avatarUrl: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            bio: true,
+          },
         },
         lessons: {
           select: {
@@ -161,7 +207,79 @@ export class CourseService {
       throw new NotFoundException('Course not found');
     }
 
-    return course;
+    const [studentCount, instructorStats] = await Promise.all([
+      this.prisma.purchaseItem.count({
+        where: { courseId, ...PAID_ENROLLMENT },
+      }),
+      this.instructorStats(course.instructorId),
+    ]);
+
+    return {
+      ...course,
+      studentCount,
+      instructor: { ...course.instructor, ...instructorStats },
+    };
+  }
+
+  /** จำนวนคอร์สที่เปิดขายอยู่ และจำนวนผู้เรียนทั้งหมดของผู้สอน */
+  private async instructorStats(instructorId: string) {
+    const [courseCount, students] = await Promise.all([
+      this.prisma.course.count({
+        where: { instructorId, status: StatusCourse.PUBLISHED },
+      }),
+      // คนเดียวซื้อหลายคอร์สของผู้สอนคนนี้ นับเป็นหนึ่งคน
+      this.prisma.purchaseItem.findMany({
+        where: { course: { instructorId }, ...PAID_ENROLLMENT },
+        distinct: ['studentId'],
+        select: { studentId: true },
+      }),
+    ]);
+
+    return { courseCount, studentCount: students.length };
+  }
+
+  /**
+   * หน้าโปรไฟล์ผู้สอนแบบสาธารณะ: ข้อมูลแนะนำตัว ตัวเลขสรุป และคอร์สที่เปิดขายอยู่
+   * ไม่ใช่ผู้สอน หรือบัญชีถูกระงับ = ไม่พบ (ไม่บอกว่ามีบัญชีนี้อยู่)
+   */
+  async findInstructorProfile(instructorId: string) {
+    const instructor = await this.prisma.user.findUnique({
+      where: { id: instructorId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        bio: true,
+        isInstructor: true,
+        status: true,
+      },
+    });
+
+    if (!instructor?.isInstructor || !instructor.status) {
+      throw new NotFoundException('Instructor not found');
+    }
+
+    const [stats, courses] = await Promise.all([
+      this.instructorStats(instructorId),
+      this.prisma.course.findMany({
+        where: { instructorId, status: StatusCourse.PUBLISHED },
+        omit: { thumbnailPublicId: true },
+        orderBy: COURSE_ORDER.newest,
+        include: {
+          instructor: {
+            select: { firstName: true, lastName: true, avatarUrl: true },
+          },
+        },
+      }),
+    ]);
+
+    const {
+      isInstructor: _isInstructor,
+      status: _status,
+      ...profile
+    } = instructor;
+    return { ...profile, ...stats, courses };
   }
 
   async createCourse(
@@ -177,6 +295,7 @@ export class CourseService {
       return await this.prisma.course.create({
         data: {
           ...dto,
+          subtitle: dto.subtitle || null,
           instructorId,
           thumbnailUrl: thumbnail?.url ?? null,
           thumbnailPublicId: thumbnail?.publicId ?? null,
@@ -245,6 +364,7 @@ export class CourseService {
         where: { id: courseId },
         data: {
           ...dto,
+          ...(dto.subtitle !== undefined && { subtitle: dto.subtitle || null }),
           ...(thumbnail && {
             thumbnailUrl: thumbnail.url,
             thumbnailPublicId: thumbnail.publicId,
@@ -279,10 +399,7 @@ export class CourseService {
     }
 
     const purchaseCount = await this.prisma.purchaseItem.count({
-      where: {
-        courseId,
-        purchase: { paymentStatus: PaymentStatus.SUCCESS },
-      },
+      where: { courseId, ...PAID_ENROLLMENT },
     });
 
     if (purchaseCount > 0) {
@@ -324,6 +441,20 @@ export class CourseService {
       throw new ForbiddenException(
         'This course has been suspended by an admin',
       );
+    }
+
+    // คอร์สที่ไม่มีบทเรียนเลยขายได้ถ้าไม่กันไว้ ผู้เรียนจ่ายเงินแล้วได้คอร์สว่าง
+    // หน้าเว็บมี checklist บอกก่อนแล้ว แต่ต้องบังคับที่นี่ด้วยเพราะเรียก API ตรงได้
+    if (dto.status === StatusCourse.PUBLISHED) {
+      const lessonCount = await this.prisma.lesson.count({
+        where: { courseId },
+      });
+
+      if (lessonCount === 0) {
+        throw new BadRequestException(
+          'Add at least one lesson before publishing this course',
+        );
+      }
     }
 
     return this.prisma.course.update({

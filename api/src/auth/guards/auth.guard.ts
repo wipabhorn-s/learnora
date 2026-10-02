@@ -2,6 +2,7 @@
 
 import { AccessTokenService } from '@/auth/access-token.service';
 import { IS_PUBLIC_KEY } from '@/common/decorator/public.decorator';
+import { PrismaService } from '@/database/prisma.service';
 import {
   CanActivate,
   ExecutionContext,
@@ -17,6 +18,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private readonly accessTokenService: AccessTokenService,
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -48,6 +50,22 @@ export class AuthGuard implements CanActivate {
       }
       throw error;
     }
+
+    // token ยังไม่หมดอายุไม่ได้แปลว่าบัญชียังใช้ได้: ถ้าบัญชีถูกลบหรือโดนระงับ
+    // ระหว่างที่ล็อกอินค้างอยู่ ตอบ 401 ให้เว็บรู้ว่าต้องล็อกเอาต์
+    // ไม่งั้นแต่ละ endpoint จะตอบ 404 "User not found" กระจัดกระจายไปหมด
+    const account = await this.prisma.user.findUnique({
+      where: { id: request.user.sub },
+      select: { status: true },
+    });
+
+    if (!account?.status) {
+      throw new UnauthorizedException({
+        message: 'Your session is no longer valid. Please log in again.',
+        code: 'SESSION_INVALID',
+      });
+    }
+
     return true;
   }
 }

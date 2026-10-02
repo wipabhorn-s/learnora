@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@/database/generated/prisma/client';
 import { FindStudentDashboardDto } from '@/dashboard/dto/find-student-dashboard.dto';
 import { Injectable } from '@nestjs/common';
+import { pageCount } from '@/common/utils/pagination';
 
 @Injectable()
 export class DashboardService {
@@ -84,7 +85,7 @@ export class DashboardService {
 
     const limit = 3;
     const total = continueLearningItems.length;
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = pageCount(total, limit);
     const requestedPage = dto.page ?? 1;
     const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
     const items = continueLearningItems.slice((page - 1) * limit, page * limit);
@@ -104,9 +105,11 @@ export class DashboardService {
     });
     const courseIds = courses.map((c) => c.id);
 
+    // คืนเงินรายคอร์สได้ คำสั่งซื้อยัง SUCCESS อยู่ จึงต้องตัดคอร์สที่คืนเงินแล้วออก
     const where = {
       courseId: { in: courseIds },
       purchase: { paymentStatus: PaymentStatus.SUCCESS },
+      enrollmentStatus: { not: EnrollmentStatus.REFUNDED },
     };
 
     // ต้องดึงมาทั้งหมดแยกจาก recentEnrollments เพราะ totalRevenue/totalStudents

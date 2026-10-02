@@ -2,6 +2,7 @@
 
 import { AccessTokenService } from '@/auth/access-token.service';
 import { EmailVerificationTokenService } from '@/auth/email-verification-token.service';
+import { OneTimeCodeService } from '@/auth/one-time-code.service';
 import { ResetTokenService } from '@/auth/reset-token.service';
 import { Module } from '@nestjs/common';
 
@@ -14,11 +15,13 @@ import { Module } from '@nestjs/common';
     AccessTokenService,
     EmailVerificationTokenService,
     ResetTokenService,
+    OneTimeCodeService,
   ],
   exports: [
     AccessTokenService,
     EmailVerificationTokenService,
     ResetTokenService,
+    OneTimeCodeService,
   ],
 })
 export class TokenModule {}

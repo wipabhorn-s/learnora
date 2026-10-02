@@ -3,6 +3,7 @@ import {
   PaymentStatus,
 } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
+import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
 import { UpdateProgressDto } from '@/learning/dto/update-progress.dto';
 import { FindEnrolledCoursesDto } from '@/learning/dto/find-enrolled-courses.dto';
 import {
@@ -10,6 +11,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { pageQuery, paginated } from '@/common/utils/pagination';
 
 const ENROLLED_COURSE_SELECT = {
   id: true,
@@ -29,7 +31,10 @@ const ENROLLED_COURSE_SELECT = {
 
 @Injectable()
 export class LearningService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   private async findActivePurchaseItem(studentId: string, courseId: number) {
     const purchaseItem = await this.prisma.purchaseItem.findFirst({
@@ -113,16 +118,14 @@ export class LearningService {
         this.prisma.purchaseItem.findMany({
           where: activeWhere,
           orderBy: { course: { title: 'asc' } },
-          skip: (activePage - 1) * limit,
-          take: limit,
+          ...pageQuery(activePage, limit),
           select: ENROLLED_COURSE_SELECT,
         }),
         this.prisma.purchaseItem.count({ where: activeWhere }),
         this.prisma.purchaseItem.findMany({
           where: expiredWhere,
           orderBy: { course: { title: 'asc' } },
-          skip: (expiredPage - 1) * limit,
-          take: limit,
+          ...pageQuery(expiredPage, limit),
           select: ENROLLED_COURSE_SELECT,
         }),
         this.prisma.purchaseItem.count({ where: expiredWhere }),
@@ -163,18 +166,18 @@ export class LearningService {
     };
 
     return {
-      active: {
-        items: activeItems.map(withProgress),
-        total: activeTotal,
-        page: activePage,
-        totalPages: Math.ceil(activeTotal / limit),
-      },
-      expired: {
-        items: expiredItems.map(withProgress),
-        total: expiredTotal,
-        page: expiredPage,
-        totalPages: Math.ceil(expiredTotal / limit),
-      },
+      active: paginated(
+        activeItems.map(withProgress),
+        activeTotal,
+        activePage,
+        limit,
+      ),
+      expired: paginated(
+        expiredItems.map(withProgress),
+        expiredTotal,
+        expiredPage,
+        limit,
+      ),
     };
   }
 
@@ -200,6 +203,7 @@ export class LearningService {
               id: true,
               title: true,
               videoUrl: true,
+              videoPublicId: true,
               durationSeconds: true,
               orderNo: true,
             },
@@ -219,8 +223,18 @@ export class LearningService {
 
     return {
       course: { id: course.id, title: course.title },
-      lessons: course.lessons.map((lesson) => ({
+      lessons: course.lessons.map(({ videoPublicId, ...lesson }) => ({
         ...lesson,
+        // ไม่ส่ง URL จริงของไฟล์ ส่งลิงก์ที่หมดอายุเองแทน กันแชร์ลิงก์วิดีโอต่อ
+        videoUrl: this.cloudinaryService.signedVideoUrl(
+          videoPublicId ??
+            this.cloudinaryService.getPublicIdFromUrl(
+              lesson.videoUrl,
+              'video',
+            ) ??
+            '',
+          lesson.videoUrl,
+        ),
         progress: progressByLessonId.get(lesson.id) ?? {
           lastPositionSeconds: 0,
           maxWatchedSeconds: 0,

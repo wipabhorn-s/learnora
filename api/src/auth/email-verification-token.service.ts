@@ -58,6 +58,17 @@ export class EmailVerificationTokenService {
     });
   }
 
+  /** เวลาที่ออกลิงก์ที่ยังไม่ถูกใช้ล่าสุด ใช้กันการกดส่งซ้ำถี่ ๆ */
+  async lastIssuedAt(userId: string): Promise<Date | null> {
+    const latest = await this.prisma.emailVerificationToken.findFirst({
+      where: { userId, usedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+
+    return latest?.createdAt ?? null;
+  }
+
   /** ทิ้งลิงก์ที่ยังไม่ถูกใช้ทั้งหมดของ user คนนั้น */
   async discardPending(userId: string) {
     await this.prisma.emailVerificationToken.deleteMany({

@@ -24,22 +24,29 @@ enum Role {
 /// isInstructor ต่างหาก เพราะคนคนเดียวเป็นได้ทั้งผู้เรียนและผู้สอนพร้อมกัน
 /// (แบบ Udemy) ถ้าผูกไว้กับ role ผู้สอนจะซื้อและเรียนคอร์สคนอื่นไม่ได้เลย
 model User {
-  id              String         @id @default(uuid()) @db.Uuid
-  firstName       String         @map("first_name")
-  lastName        String         @map("last_name")
-  avatarUrl       String?        @map("avatar_url")
-  avatarPublicId  String?        @map("avatar_public_id")
-  role            Role
-  isInstructor    Boolean        @default(false) @map("is_instructor")
-  status          Boolean        @default(true)
-  email           String         @unique @db.Citext // sensitive case Ann@mail.com = ann@mail.com
+  id               String    @id @default(uuid()) @db.Uuid
+  firstName        String    @map("first_name")
+  lastName         String    @map("last_name")
+  avatarUrl        String?   @map("avatar_url")
+  avatarPublicId   String?   @map("avatar_public_id")
+  role             Role
+  isInstructor     Boolean   @default(false) @map("is_instructor")
+  status           Boolean   @default(true)
+  email            String    @unique @db.Citext // sensitive case Ann@mail.com = ann@mail.com
   /// null = ยังไม่ได้กดลิงก์ยืนยันในอีเมล -> ล็อกอินด้วยรหัสผ่านไม่ได้
   /// บัญชีที่มาทาง Google ถือว่ายืนยันแล้วทันที เพราะ Google ยืนยันให้
-  emailVerifiedAt DateTime?      @map("email_verified_at") @db.Timestamptz(2)
-  password        String?
-  googleId        String?        @unique @map("google_id")
-  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(2)
-  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(2)
+  emailVerifiedAt  DateTime? @map("email_verified_at") @db.Timestamptz(2)
+  password         String?
+  googleId         String?   @unique @map("google_id")
+  /// แนะนำตัวผู้สอน แสดงในหน้าคอร์สส่วน About the instructor
+  bio              String?   @db.VarChar(1000)
+  /// เปิดแล้ว ล็อกอินด้วยรหัสผ่านต้องใส่รหัส 6 หลักที่ส่งไปทางอีเมลอีกชั้น
+  /// (ล็อกอินด้วย Google ไม่ต้อง เพราะ Google ยืนยันตัวตนให้แล้ว)
+  twoFactorEnabled Boolean   @default(false) @map("two_factor_enabled")
+  /// ผู้ใช้ลบบัญชีเอง: ข้อมูลส่วนตัวถูกลบ/แทนที่แล้ว เหลือแถวไว้ผูกกับประวัติการซื้อ
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(2)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(2)
 
   courses                 Course[]
   wishlists               Wishlist[]
@@ -48,6 +55,12 @@ model User {
   purchaseItems           PurchaseItem[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  oneTimeCodes            OneTimeCode[]
+  refundRequests          RefundRequest[]          @relation("RefundRequestStudent")
+  reviewedRefundRequests  RefundRequest[]          @relation("RefundRequestReviewer")
+  payoutAccount           PayoutAccount?
+  payouts                 Payout[]                 @relation("PayoutInstructor")
+  recordedPayouts         Payout[]                 @relation("PayoutRecordedBy")
 
   @@map("users")
 }
@@ -88,6 +101,32 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+enum OtpPurpose {
+  LOGIN
+  ENABLE_TWO_FACTOR
+  /// บัญชีที่ไม่มีรหัสผ่าน (เข้าทาง Google) ยืนยันการลบบัญชีด้วยรหัสทางอีเมล
+  DELETE_ACCOUNT
+}
+
+/// รหัส 6 หลักที่ส่งทางอีเมล (2FA) — เก็บเป็น HMAC ด้วย secret ของเซิร์ฟเวอร์
+/// ไม่ใช่ sha256 เปล่า ๆ เพราะรหัสมีแค่ล้านแบบ ถ้าฐานข้อมูลหลุดจะไล่เดาได้ทันที
+/// ใช้ได้ครั้งเดียว หมดอายุใน 10 นาที และผิดครบ 5 ครั้งแล้วใช้ไม่ได้อีก
+model OneTimeCode {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  purpose   OtpPurpose
+  codeHash  String     @map("code_hash")
+  attempts  Int        @default(0)
+  expiresAt DateTime   @map("expires_at") @db.Timestamptz(2)
+  usedAt    DateTime?  @map("used_at") @db.Timestamptz(2)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(2)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("one_time_codes")
+}
+
 enum Category {
   PROGRAMMING
   BUSINESS
@@ -121,7 +160,13 @@ model Course {
   category          Category
   level             Level
   title             String
+  /// สรุปสั้น 1-2 บรรทัดใต้ชื่อคอร์ส ไม่มีจะตัดจาก description แทน
+  subtitle          String?      @db.VarChar(160)
   description       String
+  /// สิ่งที่ผู้เรียนจะทำได้หลังเรียนจบ แสดงเป็นเช็กลิสต์ในหน้าคอร์ส
+  learningOutcomes  String[]     @default([]) @map("learning_outcomes")
+  /// พื้นฐานที่ควรมีก่อนเรียน
+  requirements      String[]     @default([])
   price             Decimal      @db.Decimal(10, 2)
   accessType        AccessType   @map("access_type")
   accessDuration    Int?         @map("access_duration")
@@ -189,17 +234,40 @@ enum PaymentStatus {
   REFUNDED
 }
 
-model Purchase {
-  id            String        @id @default(uuid()) @db.Uuid
-  studentId     String        @map("student_id") @db.Uuid
-  total         Decimal       @db.Decimal(10, 2)
-  paymentStatus PaymentStatus @default(PENDING) @map("payment_status")
-  purchasedAt   DateTime?     @map("purchased_at") @db.Timestamptz(2)
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(2)
-  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(2)
+/// ช่องทางที่ใช้จ่าย FREE = คอร์สฟรีทั้งตะกร้า ไม่ผ่านผู้ให้บริการชำระเงิน
+enum PaymentMethod {
+  FREE
+  CARD
+  PROMPTPAY
+  TRUEMONEY
+  MOBILE_BANKING
+}
 
-  student       User           @relation(fields: [studentId], references: [id])
-  purchaseItems PurchaseItem[]
+model Purchase {
+  id                 String         @id @default(uuid()) @db.Uuid
+  studentId          String         @map("student_id") @db.Uuid
+  total              Decimal        @db.Decimal(10, 2)
+  paymentStatus      PaymentStatus  @default(PENDING) @map("payment_status")
+  paymentMethod      PaymentMethod? @map("payment_method")
+  /// รหัสรายการของ Opn Payments (chrg_...) ใช้ถามสถานะ/คืนเงิน
+  chargeId           String?        @unique @map("charge_id")
+  /// ระบบยกเลิกเองเพราะผู้ใช้เริ่มจ่ายรายการใหม่ ทั้งที่ charge เดิมที่ Opn ยังจ่ายได้อยู่
+  /// (QR พร้อมเพย์สั่งยกเลิกที่ Opn ไม่ได้) ถ้าจ่ายเข้ามาทีหลัง: เปิดคอร์สให้ หรือคืนเงินถ้าจ่ายซ้ำ
+  cancelledAt        DateTime?      @map("cancelled_at") @db.Timestamptz(2)
+  /// เงินเข้าแล้วแต่คืนผ่าน Opn ไม่ได้ (พร้อมเพย์) และลูกค้ามีคอร์สนี้อยู่แล้ว
+  /// แอดมินต้องโอนคืนเอง แล้วกด Mark as refunded
+  manualRefundNeeded Boolean        @default(false) @map("manual_refund_needed")
+  /// เลขอ้างอิงการโอนคืนที่แอดมินกรอกตอนคืนเงินเอง (ช่องทางที่คืนผ่าน Opn ไม่ได้)
+  refundReference    String?        @map("refund_reference")
+  /// ยอดที่คืนไปแล้ว (คืนรายคอร์สทำให้คืนบางส่วนได้) รายได้จริง = total - refundedAmount
+  refundedAmount     Decimal        @default(0) @map("refunded_amount") @db.Decimal(10, 2)
+  purchasedAt        DateTime?      @map("purchased_at") @db.Timestamptz(2)
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(2)
+
+  student        User            @relation(fields: [studentId], references: [id])
+  purchaseItems  PurchaseItem[]
+  refundRequests RefundRequest[]
 
   @@map("purchases")
 }
@@ -223,6 +291,7 @@ model PurchaseItem {
   course           Course           @relation(fields: [courseId], references: [id])
   student          User             @relation(fields: [studentId], references: [id])
   lessonProgresses LessonProgress[]
+  refundRequest    RefundRequest?
 
   @@unique([purchaseId, courseId])
   @@index([studentId, courseId])
@@ -243,4 +312,69 @@ model LessonProgress {
 
   @@unique([purchaseItemId, lessonId])
   @@map("lesson_progress")
+}
+
+enum RefundRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// นักเรียนขอคืนเงินทีละคอร์ส (PurchaseItem) แอดมินพิจารณาอนุมัติ/ปฏิเสธ
+/// ขอได้ครั้งเดียวต่อคอร์สในคำสั่งซื้อ อนุมัติแล้วคืนเฉพาะราคาคอร์สนั้น (คืนบางส่วนของ charge)
+model RefundRequest {
+  id              String              @id @default(uuid()) @db.Uuid
+  purchaseItemId  String              @unique @map("purchase_item_id") @db.Uuid
+  purchaseId      String              @map("purchase_id") @db.Uuid
+  studentId       String              @map("student_id") @db.Uuid
+  reason          String              @db.VarChar(1000)
+  status          RefundRequestStatus @default(PENDING)
+  /// เหตุผลที่แอดมินแจ้งกลับ (บังคับตอนปฏิเสธ) นักเรียนเห็นข้อความนี้
+  adminNote       String?             @map("admin_note") @db.VarChar(1000)
+  /// เลขอ้างอิงการโอนคืน เมื่อแอดมินคืนเองนอกระบบ (เช่นพร้อมเพย์)
+  refundReference String?             @map("refund_reference") @db.VarChar(100)
+  reviewedById    String?             @map("reviewed_by_id") @db.Uuid
+  reviewedAt      DateTime?           @map("reviewed_at") @db.Timestamptz(2)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(2)
+
+  purchaseItem PurchaseItem @relation(fields: [purchaseItemId], references: [id], onDelete: Cascade)
+  purchase     Purchase     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  student      User         @relation("RefundRequestStudent", fields: [studentId], references: [id])
+  reviewedBy   User?        @relation("RefundRequestReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([purchaseId])
+  @@map("refund_requests")
+}
+
+/// บัญชีธนาคารที่ผู้สอนใช้รับเงิน (หนึ่งคนหนึ่งบัญชี) แอดมินใช้ตอนโอนจ่าย
+model PayoutAccount {
+  instructorId  String   @id @map("instructor_id") @db.Uuid
+  bankName      String   @map("bank_name") @db.VarChar(100)
+  accountName   String   @map("account_name") @db.VarChar(100)
+  accountNumber String   @map("account_number") @db.VarChar(30)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(2)
+
+  instructor User @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@map("payout_accounts")
+}
+
+/// การจ่ายเงินให้ผู้สอน แอดมินโอนเองนอกระบบแล้วบันทึกยอดกับเลขอ้างอิงไว้ที่นี่
+/// ยอดที่ถอนได้ = ส่วนแบ่งจากคอร์สที่พ้นช่วงขอคืนเงินแล้ว - ผลรวมของตารางนี้
+model Payout {
+  id           String   @id @default(uuid()) @db.Uuid
+  instructorId String   @map("instructor_id") @db.Uuid
+  amount       Decimal  @db.Decimal(10, 2)
+  /// เลขอ้างอิงการโอน ไว้ตรวจสอบย้อนหลัง
+  reference    String   @db.VarChar(100)
+  recordedById String   @map("recorded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(2)
+
+  instructor User @relation("PayoutInstructor", fields: [instructorId], references: [id])
+  recordedBy User @relation("PayoutRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([instructorId, createdAt])
+  @@map("payouts")
 }

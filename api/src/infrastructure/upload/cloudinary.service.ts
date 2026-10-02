@@ -21,6 +21,15 @@ export type CloudinaryVideoAsset = CloudinaryAsset & {
 
 type CloudinaryResourceType = 'image' | 'video';
 
+/**
+ * upload = เปิดด้วย URL ตรงได้เลย (รูปโปรไฟล์ รูปปกคอร์ส)
+ * authenticated = ต้องมีลายเซ็นถึงเปิดได้ (วิดีโอบทเรียน ซึ่งเป็นของที่ขาย)
+ */
+type CloudinaryDeliveryType = 'upload' | 'authenticated';
+
+/** อายุลิงก์วิดีโอที่ส่งให้หน้าเล่น พอสำหรับนั่งเรียนยาว ๆ แต่แชร์ต่อได้ไม่นาน */
+export const VIDEO_URL_TTL_SECONDS = 6 * 60 * 60;
+
 @Injectable()
 export class CloudinaryService {
   private readonly logger = new Logger(CloudinaryService.name);
@@ -61,6 +70,8 @@ export class CloudinaryService {
       const writableStream = cloudinary.uploader.upload_stream(
         {
           resource_type: 'video',
+          // วิดีโอเป็นของที่ขาย: เปิดด้วย URL ตรงไม่ได้ ต้องขอลิงก์ที่มีลายเซ็นจาก API
+          type: 'authenticated',
         },
         (error, result) => {
           if (error || !result) {
@@ -96,6 +107,30 @@ export class CloudinaryService {
     });
   }
 
+  /** ดูจาก URL ที่เก็บไว้ว่าไฟล์อยู่แบบไหน (วิดีโอที่อัปโหลดก่อนเปลี่ยนเป็น upload) */
+  deliveryTypeOf(url: string | null | undefined): CloudinaryDeliveryType {
+    return url?.includes('/authenticated/') ? 'authenticated' : 'upload';
+  }
+
+  /**
+   * ลิงก์วิดีโอที่หมดอายุเอง ให้หน้าเล่นใช้แทน URL จริง
+   * รองรับ Range request (กรอวิดีโอได้) หมดอายุหรือแก้ลายเซ็นแล้วตอบ 401
+   * ใช้ได้ทั้งวิดีโอแบบ authenticated และแบบ upload (ของเก่า)
+   */
+  signedVideoUrl(
+    publicId: string,
+    storedUrl: string,
+    ttlSeconds = VIDEO_URL_TTL_SECONDS,
+  ): string {
+    // สกุลไฟล์ต้องตรงกับไฟล์จริง ลายเซ็นคิดรวมสกุลไฟล์ด้วย
+    const format = /\.([a-z0-9]+)(?:\?.*)?$/i.exec(storedUrl)?.[1] ?? 'mp4';
+    return cloudinary.utils.private_download_url(publicId, format, {
+      resource_type: 'video',
+      type: this.deliveryTypeOf(storedUrl),
+      expires_at: Math.floor(Date.now() / 1000) + ttlSeconds,
+    });
+  }
+
   getPublicIdFromUrl(
     url: string | null | undefined,
     resourceType: CloudinaryResourceType = 'image',
@@ -111,12 +146,15 @@ export class CloudinaryService {
         return undefined;
       }
 
-      const uploadMarker = `/${resourceType}/upload/`;
-      const markerIndex = parsedUrl.pathname.indexOf(uploadMarker);
+      const uploadMarker = [
+        `/${resourceType}/upload/`,
+        `/${resourceType}/authenticated/`,
+      ].find((marker) => parsedUrl.pathname.includes(marker));
 
-      if (markerIndex === -1) {
+      if (!uploadMarker) {
         return undefined;
       }
+      const markerIndex = parsedUrl.pathname.indexOf(uploadMarker);
 
       const assetPath = decodeURIComponent(
         parsedUrl.pathname.slice(markerIndex + uploadMarker.length),
@@ -144,6 +182,7 @@ export class CloudinaryService {
   async deleteAsset(
     publicId: string | null | undefined,
     resourceType: CloudinaryResourceType = 'image',
+    deliveryType: CloudinaryDeliveryType = 'upload',
   ): Promise<void> {
     if (!publicId) {
       return;
@@ -152,6 +191,7 @@ export class CloudinaryService {
     try {
       const result: unknown = await cloudinary.uploader.destroy(publicId, {
         resource_type: resourceType,
+        type: deliveryType,
         invalidate: true,
       });
 

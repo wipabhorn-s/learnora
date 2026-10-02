@@ -1,16 +1,8 @@
 // api\src\user\dto\set-password.dto.ts
 
-import {
-  IsAlphanumeric,
-  IsNotEmpty,
-  IsString,
-  MinLength,
-} from 'class-validator';
+import { StrongPassword } from '@/common/decorator/strong-password.decorator';
 
 export class SetPasswordDto {
-  @IsString()
-  @MinLength(8)
-  @IsNotEmpty()
-  @IsAlphanumeric()
+  @StrongPassword()
   newPassword: string;
 }

@@ -7,10 +7,12 @@ import { PrismaService } from '@/database/prisma.service';
 import { AddToWishlistDto } from '@/wishlist/dto/add-to-wishlist.dto';
 import { FindWishlistDto } from '@/wishlist/dto/find-wishlist.dto';
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { pageQuery, paginated } from '@/common/utils/pagination';
 
 const COURSE_SELECT = {
   id: true,
@@ -84,8 +86,7 @@ export class WishlistService {
       this.prisma.wishlist.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        ...pageQuery(page, limit),
         select: {
           id: true,
           createdAt: true,
@@ -95,25 +96,33 @@ export class WishlistService {
       this.prisma.wishlist.count({ where }),
     ]);
 
-    return {
-      items: items.map((item) => ({
+    return paginated(
+      items.map((item) => ({
         ...item,
         isAvailable: item.course.status === StatusCourse.PUBLISHED,
       })),
       total,
       page,
-      totalPages: Math.ceil(total / limit),
-    };
+      limit,
+    );
   }
 
   async addToWishlist(studentId: string, dto: AddToWishlistDto) {
     const course = await this.prisma.course.findUnique({
       where: { id: dto.courseId },
-      select: { status: true },
+      select: { status: true, instructorId: true },
     });
 
     if (!course || course.status !== StatusCourse.PUBLISHED) {
       throw new NotFoundException('Course not found');
+    }
+
+    // ผู้สอนก็คือนักเรียนที่เปิดสิทธิ์สอน (บัญชีเดียวกัน) จึงต้องกันซื้อคอร์สตัวเอง
+    // ผู้สอนดูคอร์สตัวเองได้ฟรีจากหน้าดูตัวอย่างของผู้สอนอยู่แล้ว
+    if (course.instructorId === studentId) {
+      throw new BadRequestException(
+        "You can't add your own course to your wishlist",
+      );
     }
 
     const activeEnrollment = await this.prisma.purchaseItem.findFirst({
