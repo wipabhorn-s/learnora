@@ -1,7 +1,14 @@
+import CourseThumbnail from "@/components/shared/CourseThumbnail";
+import ExpandableText from "@/components/shared/ExpandableText";
+import ToastFromUrl from "@/components/shared/ToastFromUrl";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import CourseBackButton from "@/components/features/course/CourseBackButton";
-import CourseThumbnail from "@/components/shared/CourseThumbnail";
+import {
+  addToCartAction,
+  removeFromCartAction,
+} from "@/lib/actions/cart.actions";
+import { enrollFreeAction } from "@/lib/actions/purchase.action";
 import {
   addToWishlistAction,
   removeFromWishlistAction,
@@ -9,34 +16,44 @@ import {
 import { ApiError } from "@/lib/api/api-error";
 import { CartApi } from "@/lib/api/cart.api";
 import { CourseApi } from "@/lib/api/course.api";
-import { WishlistApi } from "@/lib/api/wishlist.api";
 import { getOwnedCourseIds, PurchaseApi } from "@/lib/api/purchase.api";
+import { WishlistApi } from "@/lib/api/wishlist.api";
 import { auth } from "@/lib/auth";
-import { formatDuration } from "@/lib/utils";
 import {
-  AlertCircle,
-  BookOpen,
+  formatClock,
+  formatCount,
+  formatEnum,
+  formatMonth,
+  formatPrice,
+  fullName,
+} from "@/lib/format";
+import { formatDuration } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
+import {
+  BarChart3,
+  CalendarClock,
+  Check,
+  ChevronRight,
   Clock,
+  GraduationCap,
   Heart,
-  Play,
+  Infinity as InfinityIcon,
+  Lock,
+  Pencil,
+  PlayCircle,
+  RefreshCw,
   ShoppingCart,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  addToCartAction,
-  removeFromCartAction,
-} from "@/lib/actions/cart.actions";
 
 export default async function CourseDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ cartError?: string; wishlistError?: string }>;
 }) {
   const { courseId: courseIdParam } = await params;
-  const { cartError, wishlistError } = await searchParams;
   const courseId = Number(courseIdParam);
 
   if (!Number.isInteger(courseId)) notFound();
@@ -51,6 +68,8 @@ export default async function CourseDetailPage({
 
   const session = await auth();
   const isStudent = session?.user.role === "STUDENT";
+  // ผู้สอนก็เป็นนักเรียนได้ (บัญชีเดียวกัน) คอร์สตัวเองซื้อไม่ได้
+  const isMine = course.instructorId === session?.user.id;
   let inWishlist = false;
   let inCart = false;
   let isOwned = false;
@@ -66,207 +85,417 @@ export default async function CourseDetailPage({
     isOwned = getOwnedCourseIds(purchases).has(courseId);
   }
 
-  const price = Number(course.price);
+  const isFree = Number(course.price) === 0;
   const totalSeconds = course.lessons.reduce(
     (sum, lesson) => sum + lesson.durationSeconds,
     0,
   );
+  const lessonCount = formatCount(course.lessons.length, "lesson");
+  const access =
+    course.accessType === "LIFETIME"
+      ? "Lifetime access"
+      : `${course.accessDuration}-day access`;
+  const instructorName = fullName(course.instructor);
   const currentPath = `/courses/${courseId}`;
+  const instructorPath = `/instructors/${course.instructorId}`;
+  // ดูบทเรียนได้แล้ว (ซื้อแล้ว หรือเป็นคอร์สของตัวเอง) ไม่ต้องแสดงกุญแจ
+  const canWatch = isOwned || isMine;
+  // แอดมินดูได้แต่ซื้อไม่ได้ จึงไม่มีปุ่ม
+  const canAct = !session || isStudent;
+  const showWishlist = !isOwned && !isMine && canAct;
+
+  // shrink: Button ตั้ง shrink-0 ไว้ ถ้าปุ่มหลักเป็นลิงก์ (ไม่มี form ห่อ)
+  // จะไม่ยอมหดและดันปุ่ม wishlist ล้นออกนอกการ์ด
+  const actionClass = "h-12 w-full shrink rounded-xl text-base font-bold";
+
+  /** ปุ่มหลักตามสถานะ ใช้ทั้งในกล่องซื้อและแถบล่างจอบนมือถือ */
+  const primaryAction = !canAct ? null : !session ? (
+    <Button
+      nativeButton={false}
+      className={actionClass}
+      render={
+        <Link href="/login">
+          {isFree ? <GraduationCap size={19} /> : <ShoppingCart size={19} />}
+          {isFree ? "Enroll for free" : "Add to cart"}
+        </Link>
+      }
+    />
+  ) : isMine ? (
+    <Button
+      nativeButton={false}
+      variant="outline"
+      className={actionClass}
+      render={
+        <Link href={`/instructor/courses/${courseId}/edit`}>
+          <Pencil size={19} />
+          Manage your course
+        </Link>
+      }
+    />
+  ) : isOwned ? (
+    <Button
+      nativeButton={false}
+      className={actionClass}
+      render={
+        <Link href={`/my-courses/${courseId}/player`}>
+          <PlayCircle size={19} />
+          Go to course
+        </Link>
+      }
+    />
+  ) : isFree ? (
+    <form action={enrollFreeAction.bind(null, courseId)} className="w-full">
+      <Button type="submit" className={actionClass}>
+        <GraduationCap size={19} />
+        Enroll for free
+      </Button>
+    </form>
+  ) : inCart ? (
+    <Button
+      nativeButton={false}
+      className={actionClass}
+      render={
+        <Link href="/cart">
+          <ShoppingCart size={19} />
+          Go to cart
+        </Link>
+      }
+    />
+  ) : (
+    <form
+      action={addToCartAction.bind(null, courseId, currentPath)}
+      className="w-full"
+    >
+      <Button type="submit" className={actionClass}>
+        <ShoppingCart size={19} />
+        Add to cart
+      </Button>
+    </form>
+  );
+
+  const wishlistLabel = inWishlist ? "Remove from wishlist" : "Add to wishlist";
+  const wishlistButton = showWishlist && (
+    <Button
+      type={session ? "submit" : "button"}
+      variant="outline"
+      size="icon"
+      aria-label={wishlistLabel}
+      title={wishlistLabel}
+      className="size-12 shrink-0 rounded-xl"
+      {...(!session && {
+        nativeButton: false,
+        render: <Link href="/login" />,
+      })}
+    >
+      <Heart
+        size={20}
+        className={inWishlist ? "fill-red-500 text-red-500" : ""}
+      />
+    </Button>
+  );
+
+  // แถวข้อมูลย่อในหัวคอร์ส ให้เห็นภาพรวมก่อนเลื่อนลงไปอ่าน
+  const meta: { icon: LucideIcon; label: string }[] = [
+    { icon: BarChart3, label: formatEnum(course.level) },
+    {
+      icon: PlayCircle,
+      label: `${lessonCount} · ${formatDuration(totalSeconds)}`,
+    },
+    {
+      icon: Users,
+      // 0 คนดูไม่น่าเชื่อถือ บอกว่าเป็นคอร์สใหม่แทน
+      label:
+        course.studentCount > 0
+          ? formatCount(course.studentCount, "student")
+          : "New course",
+    },
+    { icon: RefreshCw, label: `Updated ${formatMonth(course.updatedAt)}` },
+  ];
+
+  const instructorStats = [
+    formatCount(course.instructor.courseCount, "course"),
+    formatCount(course.instructor.studentCount, "student"),
+  ];
+
+  const includes: { icon: LucideIcon; label: string }[] = [
+    {
+      icon: PlayCircle,
+      label: `${lessonCount} · ${formatDuration(totalSeconds)}`,
+    },
+    {
+      icon: course.accessType === "LIFETIME" ? InfinityIcon : CalendarClock,
+      label: access,
+    },
+    { icon: BarChart3, label: `${formatEnum(course.level)} level` },
+    { icon: Clock, label: "Learn at your own pace" },
+  ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="bg-foreground py-10 text-white">
-        <div className="mx-auto max-w-7xl px-6">
-          <CourseBackButton />
-          <div className="flex items-center gap-2 text-sm text-white/60">
+    // overflow-x-clip: แถบสีเข้มของหัวคอร์สยื่นออกไปเกินขอบจอทั้งสองข้าง ตัดทิ้งไม่ให้เลื่อนแนวนอน
+    <div className="overflow-x-clip">
+      {/*
+      แถวบนของ grid = หัวคอร์ส (มีแถบสีเข้มเต็มจอเป็นพื้นหลัง) แถวล่าง = เนื้อหา
+      grid-rows-[auto_1fr]: กล่องซื้อที่คร่อม 2 แถวจะดันความสูงส่วนเกินไปที่แถวล่าง
+      ไม่ใช่แถวหัวคอร์ส (เดิมเกิดช่องว่างใหญ่ใต้หัวคอร์ส)
+      ที่ว่างให้แถบซื้อบนมือถืออยู่ที่ Footer (ดู data-sticky-cta)
+    */}
+      <div className="mx-auto grid max-w-7xl gap-x-8 gap-y-8 px-6 pb-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_1fr]">
+        <ToastFromUrl params={["cartError", "wishlistError"]} />
+
+        {/* ---- หัวคอร์ส ---- */}
+        <header className="relative isolate min-w-0 space-y-4 py-10 text-white before:absolute before:-inset-x-[100vw] before:inset-y-0 before:-z-10 before:bg-foreground">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-1 text-sm text-white/60"
+          >
             <Link href="/courses" className="hover:text-white">
               Courses
             </Link>
-            <span>/</span>
-            <span>{course.category.replace("_", " ")}</span>
-          </div>
-          <h1 className="mt-3 text-3xl font-extrabold">{course.title}</h1>
-          <p className="mt-2 max-w-2xl leading-relaxed text-white/80">
-            {course.description}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/70">
-            <span>
-              By{" "}
-              <span className="font-medium text-white">
-                {course.instructor.firstName} {course.instructor.lastName}
-              </span>
-            </span>
-            <span>·</span>
-            <span className="flex items-center gap-1">
-              <Clock size={14} />
-              {formatDuration(totalSeconds)}
-            </span>
-            <span>·</span>
-            <span className="flex items-center gap-1">
-              <BookOpen size={14} />
-              {course.lessons.length} lessons
-            </span>
-          </div>
-        </div>
-      </div>
+            <ChevronRight size={14} />
+            <Link
+              href={`/courses?category=${course.category}`}
+              className="hover:text-white"
+            >
+              {formatEnum(course.category)}
+            </Link>
+          </nav>
 
-      <div className="mx-auto grid max-w-7xl gap-8 px-6 py-8 md:grid-cols-3">
-        <div className="space-y-6 md:col-span-2">
-          <Card className="overflow-hidden py-0">
+          <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+            {course.title}
+          </h1>
+          {/* สรุปสั้น ๆ พอ คำอธิบายเต็มอยู่ใน About this course ด้านล่าง
+              max-w-2xl คุมความยาวบรรทัดให้อ่านสบาย */}
+          <p className="line-clamp-2 max-w-2xl text-lg text-white/80">
+            {course.subtitle ?? course.description}
+          </p>
+
+          <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/80">
+            {meta.map(({ icon: Icon, label }) => (
+              <li key={label} className="flex items-center gap-1.5">
+                <Icon size={16} className="shrink-0 text-white/60" />
+                {label}
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex items-center gap-3 pt-1">
+            <Avatar>
+              {course.instructor.avatarUrl && (
+                <AvatarImage src={course.instructor.avatarUrl} alt="" />
+              )}
+              <AvatarFallback>{course.instructor.firstName[0]}</AvatarFallback>
+            </Avatar>
+            <p className="text-sm text-white/70">
+              Created by{" "}
+              <Link
+                href={instructorPath}
+                className="font-semibold text-white underline-offset-4 hover:underline"
+              >
+                {instructorName}
+              </Link>
+            </p>
+          </div>
+        </header>
+
+        {/* ---- กล่องซื้อ: มือถืออยู่ต่อจากหัวคอร์ส จอใหญ่อยู่ขวาและติดอยู่กับที่ ---- */}
+        <aside className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:pt-8">
+          <Card className="gap-0 overflow-hidden py-0 lg:sticky lg:top-24">
             <CourseThumbnail
               src={course.thumbnailUrl}
               alt={course.title}
-              className="h-64"
+              sizes="(min-width: 1024px) 352px, 100vw"
+              className="aspect-video w-full"
             />
-          </Card>
 
-          <Card className="p-6">
-            <h2 className="mb-1 text-xl font-bold">Course Curriculum</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-              {course.lessons.length} lessons · {formatDuration(totalSeconds)}{" "}
-              total
-            </p>
+            <div className="space-y-5 p-6">
+              <p className="text-3xl font-extrabold tracking-tight">
+                {formatPrice(course.price)}
+              </p>
+
+              {(primaryAction || wishlistButton) && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    {primaryAction}
+                    {wishlistButton &&
+                      (session ? (
+                        <form
+                          action={(inWishlist
+                            ? removeFromWishlistAction
+                            : addToWishlistAction
+                          ).bind(null, courseId, currentPath)}
+                        >
+                          {wishlistButton}
+                        </form>
+                      ) : (
+                        wishlistButton
+                      ))}
+                  </div>
+
+                  {inCart && !isOwned && !isMine && (
+                    <form
+                      action={removeFromCartAction.bind(
+                        null,
+                        courseId,
+                        currentPath,
+                      )}
+                      className="text-center"
+                    >
+                      <button
+                        type="submit"
+                        className="text-sm font-medium text-muted-foreground hover:text-destructive"
+                      >
+                        Remove from cart
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <h2 className="mb-3 text-sm font-bold">This course includes</h2>
+                <ul className="space-y-2.5 text-sm text-muted-foreground">
+                  {includes.map(({ icon: Icon, label }) => (
+                    <li key={label} className="flex items-center gap-2.5">
+                      <Icon size={16} className="shrink-0 text-primary" />
+                      {label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </Card>
+        </aside>
+
+        {/* ---- เนื้อหา ---- */}
+        <div className="min-w-0 space-y-6">
+          {course.learningOutcomes.length > 0 && (
+            <Card className="gap-4 p-6">
+              <h2 className="text-xl font-bold">{"What you'll learn"}</h2>
+              <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                {course.learningOutcomes.map((outcome) => (
+                  <li key={outcome} className="flex gap-2.5 text-sm">
+                    <Check
+                      size={18}
+                      className="mt-px shrink-0 text-primary"
+                      aria-hidden
+                    />
+                    {outcome}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          <Card className="gap-4 p-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-xl font-bold">Curriculum</h2>
+              <p className="text-sm text-muted-foreground">
+                {lessonCount} · {formatDuration(totalSeconds)} total
+              </p>
+            </div>
 
             {course.lessons.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No lessons published yet.
               </p>
             ) : (
-              <div className="divide-y divide-border rounded-xl border border-border">
+              <ol className="divide-y rounded-xl border">
                 {course.lessons.map((lesson, index) => (
-                  <div
+                  <li
                     key={lesson.id}
-                    className="flex items-center gap-3 px-4 py-3"
+                    className="flex items-center gap-4 px-4 py-3"
                   >
-                    <Play size={14} className="shrink-0 text-primary" />
-                    <span className="flex-1 text-sm">
-                      {index + 1}. {lesson.title}
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-primary">
+                      {index + 1}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDuration(lesson.durationSeconds)}
+                    <span className="min-w-0 flex-1 truncate">
+                      {lesson.title}
                     </span>
-                  </div>
+                    <span className="text-sm text-muted-foreground tabular-nums">
+                      {formatClock(lesson.durationSeconds)}
+                    </span>
+                    {canWatch ? (
+                      <PlayCircle
+                        size={16}
+                        className="shrink-0 text-primary"
+                        aria-label="Available"
+                      />
+                    ) : (
+                      <Lock
+                        size={16}
+                        className="shrink-0 text-muted-foreground"
+                        aria-label="Locked until you enroll"
+                      />
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ol>
             )}
           </Card>
 
-        </div>
+          {course.requirements.length > 0 && (
+            <Card className="gap-4 p-6">
+              <h2 className="text-xl font-bold">Requirements</h2>
+              <ul className="list-disc space-y-2 pl-5 text-sm marker:text-primary">
+                {course.requirements.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
-        <div>
-          <Card className="sticky top-24 space-y-5 p-6 md:p-7">
-            {(cartError || wishlistError) && (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                {cartError ?? wishlistError}
+          <Card className="gap-4 p-6">
+            <h2 className="text-xl font-bold">About this course</h2>
+            <ExpandableText
+              text={course.description}
+              className="text-sm leading-relaxed text-muted-foreground"
+            />
+          </Card>
+
+          <Card id="instructor" className="scroll-mt-24 gap-4 p-6">
+            <h2 className="text-xl font-bold">About the instructor</h2>
+            <div className="flex items-center gap-4">
+              <Avatar className="size-16 text-xl">
+                {course.instructor.avatarUrl && (
+                  <AvatarImage src={course.instructor.avatarUrl} alt="" />
+                )}
+                <AvatarFallback>
+                  {course.instructor.firstName[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <Link
+                  href={instructorPath}
+                  className="text-lg font-bold hover:text-primary hover:underline"
+                >
+                  {instructorName}
+                </Link>
+                <p className="text-sm text-muted-foreground">
+                  {instructorStats.join(" · ")}
+                </p>
               </div>
+            </div>
+            {course.instructor.bio && (
+              <ExpandableText
+                text={course.instructor.bio}
+                className="text-sm leading-relaxed text-muted-foreground"
+              />
             )}
-
-            <div className="text-4xl font-extrabold tracking-tight text-primary">
-              {price === 0 ? "Free" : `฿${price.toLocaleString()}`}
-            </div>
-
-            <div className="rounded-2xl bg-muted px-4 py-3.5 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Access type</span>
-                <span className="shrink-0 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
-                  {course.accessType === "LIFETIME"
-                    ? "Lifetime"
-                    : `${course.accessDuration} days`}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-3.5">
-              {!session ? (
-                <>
-                  <Button
-                    nativeButton={false}
-                    className="h-12 w-full rounded-xl text-base font-bold"
-                    render={
-                      <Link href="/login">
-                        <ShoppingCart size={19} />
-                        Add to Cart
-                      </Link>
-                    }
-                  />
-                  <Button
-                    nativeButton={false}
-                    variant="outline"
-                    className="h-12 w-full rounded-xl text-base font-bold"
-                    render={
-                      <Link href="/login">
-                        <Heart size={18} />
-                        Add to Wishlist
-                      </Link>
-                    }
-                  />
-                </>
-              ) : !isStudent ? null : isOwned ? (
-                <Button
-                  nativeButton={false}
-                  className="h-12 w-full rounded-xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"
-                  render={
-                    <Link href={`/my-courses/${courseId}/player`}>
-                      <BookOpen size={19} />
-                      Go to Course
-                    </Link>
-                  }
-                />
-              ) : inCart ? (
-                <form
-                  action={removeFromCartAction.bind(
-                    null,
-                    courseId,
-                    currentPath,
-                  )}
-                >
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    className="h-12 w-full rounded-xl border-primary/30 text-base font-bold text-primary"
-                  >
-                    <ShoppingCart size={19} />
-                    Remove from Cart
-                  </Button>
-                </form>
-              ) : (
-                <form
-                  action={addToCartAction.bind(null, courseId, currentPath)}
-                >
-                  <Button
-                    type="submit"
-                    className="h-12 w-full rounded-xl text-base font-bold"
-                  >
-                    <ShoppingCart size={19} />
-                    Add to Cart
-                  </Button>
-                </form>
-              )}
-
-              {isStudent && !isOwned && (
-                <form
-                  action={(inWishlist
-                    ? removeFromWishlistAction
-                    : addToWishlistAction
-                  ).bind(null, courseId, currentPath)}
-                >
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    className="h-12 w-full rounded-xl text-base font-bold"
-                  >
-                    <Heart
-                      size={16}
-                      className={inWishlist ? "fill-red-500 text-red-500" : ""}
-                    />
-                    {inWishlist ? "Wishlisted" : "Add to Wishlist"}
-                  </Button>
-                </form>
-              )}
-            </div>
           </Card>
         </div>
+
+        {/* ---- มือถือ: ราคา + ปุ่มหลักติดขอบล่างจอตลอด ไม่ต้องเลื่อนหาปุ่มซื้อ ---- */}
+        {primaryAction && (
+          <div
+            data-sticky-cta
+            className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-4 border-t bg-card px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] lg:hidden"
+          >
+            <p className="shrink-0 text-xl font-extrabold">
+              {formatPrice(course.price)}
+            </p>
+            <div className="min-w-0 flex-1">{primaryAction}</div>
+          </div>
+        )}
       </div>
     </div>
   );

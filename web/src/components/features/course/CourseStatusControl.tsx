@@ -1,25 +1,15 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import StatusBadge, {
+  COURSE_STATUS_TONE,
+} from "@/components/shared/StatusBadge";
 import { updateCourseStatusAction } from "@/lib/actions/course.action";
 import type { MyCourseResponse } from "@/lib/api/course.api";
+import { formatEnum } from "@/lib/format";
+import { toast } from "@/lib/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-
-const STATUS_STYLE = {
-  DRAFT: "border-amber-300 bg-amber-50 text-amber-700",
-  PUBLISHED: "border-emerald-300 bg-emerald-50 text-emerald-700",
-  SUSPENDED: "border-red-300 bg-red-50 text-red-700",
-  DELETED: "border-border bg-muted text-muted-foreground",
-};
 
 type EditableStatus = "DRAFT" | "PUBLISHED";
 
@@ -38,11 +28,9 @@ export default function CourseStatusControl({
   if (currentStatus !== "DRAFT" && currentStatus !== "PUBLISHED") {
     return (
       <span className="inline-flex h-9 w-36 items-center px-1">
-        <span
-          className={`inline-flex h-7 w-20 items-center justify-center rounded-full border text-xs font-medium capitalize ${STATUS_STYLE[currentStatus]}`}
-        >
-          {currentStatus.toLowerCase()}
-        </span>
+        <StatusBadge tone={COURSE_STATUS_TONE[currentStatus]}>
+          {formatEnum(currentStatus)}
+        </StatusBadge>
       </span>
     );
   }
@@ -61,7 +49,7 @@ export default function CourseStatusControl({
 
       if (!result.success) {
         setCurrentStatus(previousStatus);
-        window.alert(result.message);
+        toast.error(result.message);
         return;
       }
 
@@ -70,77 +58,53 @@ export default function CourseStatusControl({
   };
 
   return (
-    <Dialog
+    <ConfirmDialog
       open={confirmOpen}
-      onOpenChange={(open) => {
-        if (!isPending) setConfirmOpen(open);
-      }}
-    >
-      <button
-        type="button"
-        role="switch"
-        aria-checked={currentStatus === "PUBLISHED"}
-        aria-label={
-          currentStatus === "PUBLISHED"
-            ? "Unpublish course"
-            : "Publish course"
-        }
-        onClick={() => setConfirmOpen(true)}
-        disabled={isPending}
-        className="inline-flex h-9 w-36 items-center justify-between gap-2 rounded-lg px-1 transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <span
-          className={`inline-flex h-7 w-20 items-center justify-center rounded-full border text-xs font-medium capitalize ${STATUS_STYLE[currentStatus]}`}
-        >
-          {currentStatus.toLowerCase()}
-        </span>
-        <span
-          aria-hidden="true"
-          className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+      onOpenChange={setConfirmOpen}
+      pending={isPending}
+      trigger={
+        <button
+          type="button"
+          role="switch"
+          aria-checked={currentStatus === "PUBLISHED"}
+          aria-label={
             currentStatus === "PUBLISHED"
-              ? "bg-emerald-500"
-              : "bg-muted-foreground/30"
-          }`}
+              ? "Unpublish course"
+              : "Publish course"
+          }
+          onClick={() => setConfirmOpen(true)}
+          disabled={isPending}
+          className="inline-flex h-9 w-36 items-center justify-between gap-2 rounded-lg px-1 transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
         >
+          <StatusBadge tone={COURSE_STATUS_TONE[currentStatus]}>
+            {formatEnum(currentStatus)}
+          </StatusBadge>
           <span
-            className={`absolute left-0 top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${
+            aria-hidden="true"
+            className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
               currentStatus === "PUBLISHED"
-                ? "translate-x-5"
-                : "translate-x-1"
+                ? "bg-emerald-500"
+                : "bg-muted-foreground/30"
             }`}
-          />
-        </span>
-      </button>
-
-      <DialogContent showCloseButton={!isPending}>
-        <DialogHeader>
-          <DialogTitle>
-            {publishing ? "Publish this course?" : "Move course to draft?"}
-          </DialogTitle>
-          <DialogDescription>
-            {publishing
-              ? "The course will become visible to everyone on the Courses page."
-              : "The course will disappear from public course listings. Students who already purchased it can still access their lessons."}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setConfirmOpen(false)}
-            disabled={isPending}
           >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={confirmChange}
-            disabled={isPending}
-          >
-            {publishing ? "Publish" : "Move to Draft"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <span
+              className={`absolute left-0 top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${
+                currentStatus === "PUBLISHED"
+                  ? "translate-x-5"
+                  : "translate-x-1"
+              }`}
+            />
+          </span>
+        </button>
+      }
+      title={publishing ? "Publish this course?" : "Move course to draft?"}
+      description={
+        publishing
+          ? "The course will become visible to everyone on the Courses page."
+          : "The course will disappear from public course listings. Students who already purchased it can still access their lessons."
+      }
+      confirmLabel={publishing ? "Publish" : "Move to Draft"}
+      onConfirm={confirmChange}
+    />
   );
 }

@@ -1,13 +1,12 @@
 import CourseCard from "@/components/features/course/CourseCard";
+import EmptyState, { BROWSE_COURSES } from "@/components/shared/EmptyState";
+import { Page, PageHeader } from "@/components/shared/Page";
 import Pagination from "@/components/shared/Pagination";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { CartApi } from "@/lib/api/cart.api";
 import { WishlistApi } from "@/lib/api/wishlist.api";
 import { auth } from "@/lib/auth";
 import { Heart } from "lucide-react";
 import { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = { title: "Wishlist | Learnora" };
 
@@ -30,26 +29,17 @@ export default async function WishlistPage({
     nextPage === 1 ? "/wishlist" : `/wishlist?page=${nextPage}`;
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col sm:min-h-[calc(100dvh-3rem)] xl:h-[calc(100dvh-4rem)] xl:min-h-0 xl:overflow-hidden">
-      <h1 className="mb-7 text-3xl font-extrabold tracking-tight">Wishlist</h1>
+    <Page height="fit">
+      <PageHeader title="Wishlist" />
 
       {items.length === 0 ? (
-        <Card className="min-h-128 flex-1 items-center justify-center gap-0 px-6 py-16 text-center">
-          <div className="mb-6 flex size-28 items-center justify-center rounded-full bg-secondary">
-            <Heart size={60} className="text-primary/70" />
-          </div>
-          <h3 className="mb-3 text-2xl font-extrabold">
-            Your wishlist is empty
-          </h3>
-          <p className="mb-8 text-base text-muted-foreground">
-            Save courses you&apos;re interested in to find them easily later.
-          </p>
-          <Button
-            nativeButton={false}
-            className="h-12 rounded-xl px-9 text-base font-semibold"
-            render={<Link href="/courses">Browse Courses</Link>}
-          />
-        </Card>
+        <EmptyState
+          icon={Heart}
+          title="Your wishlist is empty"
+          description="Save courses you're interested in to find them easily later."
+          action={BROWSE_COURSES}
+          className="min-h-128"
+        />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="grid gap-5 sm:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-4 xl:grid-rows-2">
@@ -76,6 +66,6 @@ export default async function WishlistPage({
           </div>
         </div>
       )}
-    </div>
+    </Page>
   );
 }

@@ -3,8 +3,8 @@
 import { ApiError } from "@/lib/api/api-error";
 import { WishlistApi } from "@/lib/api/wishlist.api";
 import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 export async function addToWishlistAction(
   courseId: number,

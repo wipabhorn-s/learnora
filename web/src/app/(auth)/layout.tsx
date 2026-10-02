@@ -1,3 +1,5 @@
+import AuthHero from "@/components/features/auth/AuthHero";
+import { AuthRoleProvider } from "@/components/features/auth/AuthRole";
 import Logo from "@/components/shared/Logo";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -14,28 +16,24 @@ export default async function AuthLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-1/2 items-center justify-center bg-linear-to-br from-violet-600 to-purple-800 p-12 lg:flex">
-        <div className="max-w-sm space-y-6 text-white">
-          <Logo light />
-          <h2 className="text-4xl font-extrabold leading-tight">
-            Learn new skills, at your own pace
-          </h2>
-          <p className="leading-relaxed text-white/70">
-            Access thousands of expert-led courses and continue learning
-            anywhere.
-          </p>
-        </div>
-      </aside>
+    <AuthRoleProvider>
+      {/*
+        สูงพอดีจอ (h-dvh) ไม่มีแถบเลื่อนทั้งหน้า
+        ถ้าจอเตี้ยมากจนฟอร์มล้น ให้เลื่อนเฉพาะฝั่งฟอร์มแทน (overflow-y-auto)
+      */}
+      <div className="flex h-dvh overflow-hidden">
+        <AuthHero />
 
-      <main className="flex flex-1 items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md space-y-8">
-          <div className="lg:hidden">
-            <Logo />
+        <main className="flex flex-1 overflow-y-auto px-6 py-8 [@media(max-height:700px)]:py-4">
+          {/* my-auto: อยู่กลางแนวตั้งเมื่อพอดีจอ และเลื่อนได้ครบเมื่อล้น (ต่างจาก items-center ที่ตัดส่วนบนทิ้ง) */}
+          <div className="m-auto w-full max-w-md space-y-6">
+            <div className="lg:hidden">
+              <Logo />
+            </div>
+            {children}
           </div>
-          {children}
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </AuthRoleProvider>
   );
 }

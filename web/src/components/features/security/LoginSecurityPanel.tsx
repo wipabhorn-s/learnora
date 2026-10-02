@@ -1,6 +1,11 @@
 "use client";
 
+import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
+import ChangePasswordForm from "@/components/features/security/ChangePasswordForm";
+import DeleteAccountCard from "@/components/features/security/DeleteAccountCard";
 import GoogleConnectButton from "@/components/features/security/GoogleConnectButton";
+import TwoFactorCard from "@/components/features/security/TwoFactorCard";
+import StatusBadge from "@/components/shared/StatusBadge";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,9 +16,9 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Separator } from "@/components/ui/separator";
 import {
-  becomeInstructorAction,
   changeEmailAction,
   connectGoogleAction,
   disconnectGoogleAction,
@@ -26,25 +31,28 @@ import {
   SetPasswordFormInput,
   setPasswordSchema,
 } from "@/lib/schemas/user.schema";
+import { toast } from "@/lib/toast";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, CheckCircle2, MailCheck } from "lucide-react";
+import { MailCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { Controller, useForm } from "react-hook-form";
-
-type Notice = { kind: "ok" | "error"; message: string } | null;
 
 export default function LoginSecurityPanel({
   security,
+  canDeleteAccount = false,
 }: {
   security: SecurityOverview;
+  /** แอดมินลบบัญชีตัวเองไม่ได้ (ต้องให้ Super Admin จัดการ) จึงไม่แสดง */
+  canDeleteAccount?: boolean;
 }) {
   const router = useRouter();
-  const [notice, setNotice] = useState<Notice>(null);
   const [isPending, startTransition] = useTransition();
 
   const passwordForm = useForm<SetPasswordFormInput>({
     resolver: zodResolver(setPasswordSchema),
+    // ตรวจซ้ำตอนกดส่งเท่านั้น ระหว่างพิมพ์แก้ให้กรอบแดงหายไปก่อน
+    reValidateMode: "onSubmit",
     defaultValues: { newPassword: "", confirmPassword: "" },
   });
 
@@ -53,17 +61,14 @@ export default function LoginSecurityPanel({
     defaultValues: { newEmail: "", password: "" },
   });
 
-  /** ทุกปุ่มในหน้านี้จบเหมือนกันหมด: ขึ้นข้อความแล้วรีเฟรชสถานะจาก server */
+  /** ทุกปุ่มในหน้านี้จบเหมือนกันหมด: แจ้งผลเป็น toast แล้วรีเฟรชสถานะจาก server */
   const run = (
     action: () => Promise<{ success: boolean; message: string }>,
     onSuccess?: () => void,
   ) => {
     startTransition(async () => {
       const result = await action();
-      setNotice({
-        kind: result.success ? "ok" : "error",
-        message: result.message,
-      });
+      toast.result(result);
 
       if (result.success) {
         onSuccess?.();
@@ -77,20 +82,6 @@ export default function LoginSecurityPanel({
 
   return (
     <div className="grid gap-4">
-      {notice && (
-        <Alert
-          variant={notice.kind === "error" ? "destructive" : undefined}
-          className={
-            notice.kind === "error"
-              ? "border-destructive bg-destructive/15"
-              : "border-primary/30 bg-secondary"
-          }
-        >
-          {notice.kind === "error" ? <AlertCircle /> : <CheckCircle2 />}
-          <AlertTitle>{notice.message}</AlertTitle>
-        </Alert>
-      )}
-
       {/* --- อีเมล --- */}
       <Card className="gap-4 p-6">
         <div>
@@ -103,13 +94,13 @@ export default function LoginSecurityPanel({
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{security.email}</span>
           {security.emailVerified ? (
-            <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-primary">
+            <StatusBadge size="sm" tone="success">
               Verified
-            </span>
+            </StatusBadge>
           ) : (
-            <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+            <StatusBadge size="sm" tone="danger">
               Not verified
-            </span>
+            </StatusBadge>
           )}
         </div>
 
@@ -126,8 +117,12 @@ export default function LoginSecurityPanel({
 
         {security.hasPassword ? (
           <form
+            method="post"
             onSubmit={emailForm.handleSubmit((data) =>
-              run(() => changeEmailAction(data), () => emailForm.reset()),
+              run(
+                () => changeEmailAction(data),
+                () => emailForm.reset(),
+              ),
             )}
           >
             <FieldGroup className="gap-3">
@@ -136,11 +131,13 @@ export default function LoginSecurityPanel({
                 name="newEmail"
                 render={({ field, fieldState }) => (
                   <Field className="gap-1" data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="newEmail">New email address</FieldLabel>
+                    <FieldLabel required htmlFor="newEmail">
+                      New email address
+                    </FieldLabel>
                     <Input
                       id="newEmail"
                       type="email"
-                      placeholder="you@example.com"
+                      placeholder="Enter your new email"
                       {...field}
                       aria-invalid={fieldState.invalid}
                     />
@@ -156,12 +153,11 @@ export default function LoginSecurityPanel({
                 name="password"
                 render={({ field, fieldState }) => (
                   <Field className="gap-1" data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="currentPasswordForEmail">
+                    <FieldLabel required htmlFor="currentPasswordForEmail">
                       Confirm with your password
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                       id="currentPasswordForEmail"
-                      type="password"
                       placeholder="Enter your password"
                       {...field}
                       aria-invalid={fieldState.invalid}
@@ -178,8 +174,13 @@ export default function LoginSecurityPanel({
                 current email keeps working until you click it.
               </p>
 
-              <Button type="submit" disabled={isPending} className="w-fit">
-                {isPending ? "Sending ..." : "Send confirmation link"}
+              <Button
+                type="submit"
+                disabled={isPending}
+                size="lg"
+                className="w-fit"
+              >
+                {isPending ? "Sending..." : "Send confirmation link"}
               </Button>
             </FieldGroup>
           </form>
@@ -190,19 +191,22 @@ export default function LoginSecurityPanel({
         )}
       </Card>
 
-      {/* --- รหัสผ่าน (เฉพาะบัญชีที่ยังไม่มี) --- */}
-      {!security.hasPassword && (
-        <Card className="gap-4 p-6">
-          <div>
-            <h2 className="font-bold">Password</h2>
-            <p className="text-sm text-muted-foreground">
-              This account signs in with Google only. Set a password so you can
-              also log in with your email — and so you can disconnect Google
-              later.
-            </p>
-          </div>
+      {/* --- รหัสผ่าน: มีแล้วเปลี่ยนได้ ยังไม่มี (บัญชี Google ล้วน) ตั้งได้ --- */}
+      <Card className="gap-4 p-6">
+        <div>
+          <h2 className="font-bold">Password</h2>
+          <p className="text-sm text-muted-foreground">
+            {security.hasPassword
+              ? "Change the password you use to log in with your email."
+              : "This account signs in with Google only. Set a password so you can also log in with your email — and so you can disconnect Google later."}
+          </p>
+        </div>
 
+        {security.hasPassword ? (
+          <ChangePasswordForm />
+        ) : (
           <form
+            method="post"
             onSubmit={passwordForm.handleSubmit((data) =>
               run(
                 () => setPasswordAction(data.newPassword),
@@ -216,17 +220,26 @@ export default function LoginSecurityPanel({
                 name="newPassword"
                 render={({ field, fieldState }) => (
                   <Field className="gap-1" data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="newPassword">New password</FieldLabel>
-                    <Input
+                    <FieldLabel required htmlFor="newPassword">
+                      New password
+                    </FieldLabel>
+                    <PasswordInput
                       id="newPassword"
-                      type="password"
-                      placeholder="At least 8 characters"
+                      placeholder="Create a strong password"
                       {...field}
+                      onChange={(event) => {
+                        field.onChange(event);
+                        passwordForm.clearErrors([
+                          "newPassword",
+                          "confirmPassword",
+                        ]);
+                      }}
                       aria-invalid={fieldState.invalid}
                     />
                     {fieldState.invalid && (
                       <FieldError errors={[fieldState.error]} />
                     )}
+                    <PasswordChecklist value={field.value} />
                   </Field>
                 )}
               />
@@ -236,14 +249,20 @@ export default function LoginSecurityPanel({
                 name="confirmPassword"
                 render={({ field, fieldState }) => (
                   <Field className="gap-1" data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="confirmNewPassword">
+                    <FieldLabel required htmlFor="confirmNewPassword">
                       Confirm password
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                       id="confirmNewPassword"
-                      type="password"
                       placeholder="Repeat your password"
                       {...field}
+                      onChange={(event) => {
+                        field.onChange(event);
+                        passwordForm.clearErrors([
+                          "newPassword",
+                          "confirmPassword",
+                        ]);
+                      }}
                       aria-invalid={fieldState.invalid}
                     />
                     {fieldState.invalid && (
@@ -253,13 +272,18 @@ export default function LoginSecurityPanel({
                 )}
               />
 
-              <Button type="submit" disabled={isPending} className="w-fit">
-                {isPending ? "Saving ..." : "Set password"}
+              <Button
+                type="submit"
+                disabled={isPending}
+                size="lg"
+                className="w-fit"
+              >
+                {isPending ? "Saving..." : "Set password"}
               </Button>
             </FieldGroup>
           </form>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {/* --- Google --- */}
       <Card className="gap-4 p-6">
@@ -273,25 +297,22 @@ export default function LoginSecurityPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-medium">Google</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                security.googleConnected
-                  ? "bg-secondary text-primary"
-                  : "bg-muted text-muted-foreground"
-              }`}
+            <StatusBadge
+              size="sm"
+              tone={security.googleConnected ? "success" : "neutral"}
             >
               {security.googleConnected ? "Connected" : "Not connected"}
-            </span>
+            </StatusBadge>
           </div>
 
           {security.googleConnected ? (
             <Button
               type="button"
-              variant="outline"
+              variant="destructive"
               disabled={isPending || !canDisconnect}
               onClick={() => run(disconnectGoogleAction)}
             >
-              {isPending ? "Working ..." : "Disconnect"}
+              {isPending ? "Working..." : "Disconnect"}
             </Button>
           ) : (
             <GoogleConnectButton
@@ -309,32 +330,11 @@ export default function LoginSecurityPanel({
         )}
       </Card>
 
-      {/* --- สิทธิ์สอน --- */}
-      <Card className="gap-4 p-6">
-        <div>
-          <h2 className="font-bold">Teaching</h2>
-          <p className="text-sm text-muted-foreground">
-            {security.isInstructor
-              ? "Your account can publish and manage courses."
-              : "Turn your account into an instructor account. You keep everything you have already bought."}
-          </p>
-        </div>
+      {/* --- ยืนยันตัวตน 2 ขั้นตอน --- */}
+      <TwoFactorCard security={security} />
 
-        {security.isInstructor ? (
-          <span className="w-fit rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-primary">
-            Instructor enabled
-          </span>
-        ) : (
-          <Button
-            type="button"
-            className="w-fit"
-            disabled={isPending}
-            onClick={() => run(becomeInstructorAction)}
-          >
-            {isPending ? "Working ..." : "Become an instructor"}
-          </Button>
-        )}
-      </Card>
+      {/* --- ลบบัญชี (สิทธิ์ตาม PDPA) --- */}
+      {canDeleteAccount && <DeleteAccountCard security={security} />}
     </div>
   );
 }

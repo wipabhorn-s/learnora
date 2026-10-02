@@ -1,13 +1,21 @@
 import CourseCard from "@/components/features/course/CourseCard";
 import CourseFilters from "@/components/features/course/CourseFilters";
+import CourseToolbar from "@/components/features/course/CourseToolbar";
+import EmptyState from "@/components/shared/EmptyState";
 import Pagination from "@/components/shared/Pagination";
+import { Card } from "@/components/ui/card";
 import { CartApi } from "@/lib/api/cart.api";
 import { CourseApi, FindCoursesResponse } from "@/lib/api/course.api";
-import { WishlistApi } from "@/lib/api/wishlist.api";
 import { getOwnedCourseIds, PurchaseApi } from "@/lib/api/purchase.api";
+import { WishlistApi } from "@/lib/api/wishlist.api";
 import { auth } from "@/lib/auth";
-import { BookOpen } from "lucide-react";
+import { FILTER_KEYS } from "@/lib/constants/course-filters";
+import { formatEnum } from "@/lib/format";
+import { CATEGORIES } from "@/lib/schemas/course.schema";
+import { BookOpen, SearchX } from "lucide-react";
 import { Metadata } from "next";
+import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 
 export const metadata: Metadata = { title: "Courses | Learnora" };
 
@@ -16,6 +24,7 @@ type SearchParams = {
   category?: string;
   level?: string;
   accessType?: string;
+  sort?: string;
   page?: string;
 };
 
@@ -41,6 +50,7 @@ export default async function CoursesPage({
       category: params.category,
       level: params.level,
       accessType: params.accessType,
+      sort: params.sort,
       page: params.page ? Number(params.page) : undefined,
     });
   } catch {
@@ -61,7 +71,10 @@ export default async function CoursesPage({
       cartCourseIds = new Set(cart.items.map((item) => item.course.id));
       wishlistCourseIds = new Set(wishlist);
       ownedCourseIds = getOwnedCourseIds(purchases);
-    } catch {}
+    } catch (error) {
+      // session ใช้ไม่ได้แล้ว apiFetch จะ redirect ไปล็อกเอาต์ ห้ามกลืนไว้
+      unstable_rethrow(error);
+    }
   }
 
   const viewer = !user
@@ -87,62 +100,79 @@ export default async function CoursesPage({
     return `/courses?${query.toString()}`;
   };
 
+  // กรองหรือค้นหาอยู่ = หน้าว่างเพราะตัวกรอง ไม่ใช่เพราะยังไม่มีคอร์สเลย
+  const isFiltered = FILTER_KEYS.some(
+    (key) => params[key as keyof SearchParams],
+  );
+
   return (
-    <div className="min-h-[calc(100dvh-4rem)] bg-background">
-      <div className="mx-auto flex max-w-7xl items-end gap-8 px-6 pt-4">
-        <h1 className="text-2xl font-extrabold tracking-tight lg:w-56 lg:shrink-0">
-          All Courses
-        </h1>
-        <p className="ml-auto text-sm text-muted-foreground lg:ml-0">
-          {data.total} courses found
-        </p>
-      </div>
+    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl gap-8 px-6 py-8">
+      {/* หัวข้อหน้าไม่แสดง (ผู้ใช้รู้อยู่แล้วว่าอยู่หน้าไหน) แต่ยังมี h1 ให้ screen reader */}
+      <h1 className="sr-only">Courses</h1>
 
-      <div className="mx-auto flex max-w-7xl gap-8 px-6 pb-6 pt-5">
-        <aside className="hidden w-56 shrink-0 lg:block">
+      <aside className="hidden w-60 shrink-0 lg:block">
+        <Card className="sticky top-24 p-5">
           <CourseFilters />
-        </aside>
+        </Card>
+      </aside>
 
-        <div className="flex min-h-[calc(100dvh-9.25rem)] flex-1 flex-col">
-          {data.courses.length > 0 ? (
-            <div className="flex flex-1 flex-col">
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {data.courses.map((course) => (
-                  <CourseCard
-                    key={course.id}
-                    course={course}
-                    compact
-                    viewer={viewer}
-                    inCart={cartCourseIds.has(course.id)}
-                    inWishlist={wishlistCourseIds.has(course.id)}
-                    isOwned={ownedCourseIds.has(course.id)}
-                    returnTo={returnTo}
-                  />
-                ))}
-              </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-5">
+        <CourseToolbar total={data.total} />
 
-              <div className="mt-auto">
-                <Pagination
-                  currentPage={data.page}
-                  totalPages={data.totalPages}
-                  getPageHref={buildPageUrl}
-                  ariaLabel="Course pages"
+        {data.courses.length > 0 ? (
+          <>
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {data.courses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  compact
+                  viewer={viewer}
+                  inCart={cartCourseIds.has(course.id)}
+                  inWishlist={wishlistCourseIds.has(course.id)}
+                  isOwned={ownedCourseIds.has(course.id)}
+                  isMine={course.instructorId === user?.id}
+                  returnTo={returnTo}
                 />
-              </div>
+              ))}
             </div>
-          ) : (
-            <div className="py-24 text-center">
-              <BookOpen
-                size={48}
-                className="mx-auto mb-4 text-muted-foreground"
+
+            <div className="mt-auto">
+              <Pagination
+                currentPage={data.page}
+                totalPages={data.totalPages}
+                getPageHref={buildPageUrl}
+                ariaLabel="Course pages"
               />
-              <h3 className="mb-2 font-bold">No courses found</h3>
-              <p className="text-sm text-muted-foreground">
-                Try adjusting your search or filters
-              </p>
             </div>
-          )}
-        </div>
+          </>
+        ) : isFiltered ? (
+          <EmptyState
+            icon={SearchX}
+            title="No courses match"
+            description="Try a different search, or browse a category instead."
+            className="flex-none py-12"
+          >
+            <div className="flex max-w-xl flex-wrap justify-center gap-2">
+              {CATEGORIES.map((category) => (
+                <Link
+                  key={category}
+                  href={`/courses?category=${category}`}
+                  className="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
+                >
+                  {formatEnum(category)}
+                </Link>
+              ))}
+            </div>
+          </EmptyState>
+        ) : (
+          <EmptyState
+            icon={BookOpen}
+            title="No courses yet"
+            description="New courses are on the way — check back soon."
+            className="flex-none py-12"
+          />
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { ApiError } from "@/lib/api/api-error";
 import { PurchaseApi } from "@/lib/api/purchase.api";
 import { auth } from "@/lib/auth";
+import { formatDate, formatPrice } from "@/lib/format";
 import { CheckCircle } from "lucide-react";
 import { Metadata } from "next";
 import Link from "next/link";
@@ -56,7 +57,7 @@ export default async function PaymentSuccessPage({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount Paid</span>
               <span className="font-bold text-primary">
-                {total === 0 ? "Free" : `฿${total.toLocaleString()}`}
+                {formatPrice(total)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -65,15 +66,7 @@ export default async function PaymentSuccessPage({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Date</span>
-              <span>
-                {purchase.purchasedAt
-                  ? new Date(purchase.purchasedAt).toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "-"}
-              </span>
+              <span>{formatDate(purchase.purchasedAt)}</span>
             </div>
           </div>
         </Card>

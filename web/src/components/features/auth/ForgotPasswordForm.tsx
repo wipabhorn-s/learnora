@@ -32,7 +32,7 @@ export default function ForgotPasswordForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form method="post" onSubmit={handleSubmit(onSubmit)}>
       <FieldGroup className="gap-4">
         <Controller
           control={control}
@@ -41,7 +41,7 @@ export default function ForgotPasswordForm() {
             <Field className="gap-1" data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor={field.name}>Email address</FieldLabel>
               <Input
-                placeholder="you@example.com"
+                placeholder="Enter your email"
                 type="email"
                 id={field.name}
                 {...field}
@@ -53,8 +53,8 @@ export default function ForgotPasswordForm() {
         />
 
         <Field className="gap-1">
-          <Button type="submit" disabled={isPending} className="py-5">
-            {isPending ? "Sending ..." : "Send reset link"}
+          <Button type="submit" disabled={isPending} size="lg">
+            {isPending ? "Sending..." : "Send reset link"}
           </Button>
         </Field>
       </FieldGroup>

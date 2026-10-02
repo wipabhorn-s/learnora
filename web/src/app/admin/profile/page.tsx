@@ -19,6 +19,8 @@ export default async function ProfilePage() {
       lastName={lastName}
       email={email}
       role={role}
+      isInstructor={false}
+      bio={null}
       avatarUrl={avatarUrl}
       security={security}
     />

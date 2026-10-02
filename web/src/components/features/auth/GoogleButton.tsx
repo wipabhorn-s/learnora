@@ -19,7 +19,7 @@ export default function GoogleButton({
         name="asInstructor"
         value={asInstructor ? "true" : "false"}
       />
-      <Button type="submit" variant="outline" className="w-full py-5">
+      <Button type="submit" variant="outline" size="lg" className="w-full">
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
             fill="#4285F4"

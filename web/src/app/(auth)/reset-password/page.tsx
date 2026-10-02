@@ -1,6 +1,8 @@
+import AuthHeader from "@/components/features/auth/AuthHeader";
 import ResetPasswordForm from "@/components/features/auth/ResetPasswordForm";
+import TextLink from "@/components/shared/TextLink";
+import { LinkIcon } from "lucide-react";
 import { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = { title: "Reset Password | Learnora" };
 
@@ -13,29 +15,26 @@ export default async function ResetPasswordPage({
 
   if (!token) {
     return (
-      <div className="space-y-4 text-center">
-        <h1 className="text-3xl font-extrabold">Invalid link</h1>
-        <p className="text-muted-foreground">
-          This password reset link is not valid.
+      <>
+        <AuthHeader
+          icon={LinkIcon}
+          tone="destructive"
+          title="Invalid link"
+          description="This password reset link is not valid."
+        />
+        <p className="text-center text-sm">
+          <TextLink href="/forgot-password">Request a new link</TextLink>
         </p>
-        <Link
-          href="/forgot-password"
-          className="font-medium text-primary hover:underline"
-        >
-          Request a new link
-        </Link>
-      </div>
+      </>
     );
   }
 
   return (
     <>
-      <div>
-        <h1 className="text-3xl font-extrabold">Set a new password</h1>
-        <p className="mt-2 text-muted-foreground">
-          Choose a password you haven&apos;t used before.
-        </p>
-      </div>
+      <AuthHeader
+        title="Set a new password"
+        description="Choose a password you haven't used before."
+      />
 
       <ResetPasswordForm token={token} />
     </>

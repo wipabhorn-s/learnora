@@ -75,6 +75,47 @@ export const UserApi = {
     );
   },
 
+  requestTwoFactor(token: string) {
+    return apiFetch<{ challengeId: string; message: string }>(
+      "/users/me/two-factor/request",
+      { method: "POST", token },
+    );
+  },
+
+  confirmTwoFactor(challengeId: string, code: string, token: string) {
+    return apiFetch<{ message: string }>("/users/me/two-factor/confirm", {
+      method: "POST",
+      body: { challengeId, code },
+      token,
+    });
+  },
+
+  disableTwoFactor(password: string, token: string) {
+    return apiFetch<{ message: string }>("/users/me/two-factor/disable", {
+      method: "POST",
+      body: { password },
+      token,
+    });
+  },
+
+  requestDeleteCode(email: string, token: string) {
+    return apiFetch<{ challengeId: string; message: string }>(
+      "/users/me/delete/request-code",
+      { method: "POST", body: { email }, token },
+    );
+  },
+
+  deleteAccount(
+    body: { password?: string; challengeId?: string; code?: string },
+    token: string,
+  ) {
+    return apiFetch<{ message: string }>("/users/me/delete", {
+      method: "POST",
+      body,
+      token,
+    });
+  },
+
   becomeInstructor(token: string) {
     return apiFetch<{ message: string; access_token: string }>(
       "/users/me/instructor",

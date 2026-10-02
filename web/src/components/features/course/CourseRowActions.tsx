@@ -1,15 +1,9 @@
 "use client";
 
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { removeCourseAction } from "@/lib/actions/course.action";
+import { toast } from "@/lib/toast";
 import { Pencil, Play, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,19 +18,18 @@ export default function CourseRowActions({
 }) {
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleDelete = () => {
-    setError(null);
     startTransition(async () => {
       const result = await removeCourseAction(courseId);
 
       if (!result.success) {
-        setError(result.message);
+        toast.error(result.message);
         return;
       }
 
+      toast.success("Course deleted");
       setDeleteOpen(false);
       router.refresh();
     });
@@ -74,57 +67,30 @@ export default function CourseRowActions({
         <Pencil />
       </Button>
 
-      <Dialog
+      <ConfirmDialog
         open={deleteOpen}
-        onOpenChange={(open) => {
-          if (isPending) return;
-          setDeleteOpen(open);
-          if (!open) setError(null);
-        }}
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="text-destructive hover:text-destructive"
-          onClick={() => setDeleteOpen(true)}
-          disabled={isPending}
-          aria-label={`Delete ${courseTitle}`}
-        >
-          <Trash2 />
-        </Button>
-
-        <DialogContent showCloseButton={!isPending}>
-          <DialogHeader>
-            <DialogTitle>Delete this course?</DialogTitle>
-            <DialogDescription>
-              &quot;{courseTitle}&quot; will be removed from your course list.
-              This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isPending}
-            >
-              {isPending ? "Deleting..." : "Delete Course"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setDeleteOpen}
+        pending={isPending}
+        trigger={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+            disabled={isPending}
+            aria-label={`Delete ${courseTitle}`}
+          >
+            <Trash2 />
+          </Button>
+        }
+        title="Delete this course?"
+        description={`"${courseTitle}" will be removed from your course list. This action cannot be undone.`}
+        confirmLabel="Delete Course"
+        pendingLabel="Deleting..."
+        destructive
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

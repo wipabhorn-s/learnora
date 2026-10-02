@@ -5,10 +5,13 @@ export default function CourseThumbnail({
   src,
   alt,
   className = "",
+  sizes = "300px",
 }: {
   src: string | null;
   alt: string;
   className?: string;
+  /** ความกว้างที่แสดงจริง ให้ next/image เลือกรูปขนาดพอดี ไม่เบลอ */
+  sizes?: string;
 }) {
   return (
     <div className={`relative overflow-hidden bg-secondary ${className}`}>
@@ -17,7 +20,7 @@ export default function CourseThumbnail({
           src={src}
           alt={alt}
           fill
-          sizes="300px"
+          sizes={sizes}
           className="object-cover"
         />
       ) : (

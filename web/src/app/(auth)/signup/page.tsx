@@ -1,6 +1,7 @@
+import AuthHeader from "@/components/features/auth/AuthHeader";
 import SignupForm from "@/components/features/auth/SignupForm";
+import TextLink from "@/components/shared/TextLink";
 import { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = { title: "Sign Up | Learnora" };
 
@@ -13,18 +14,14 @@ export default async function SignupPage({
 
   return (
     <>
-      <div>
-        <h1 className="text-3xl font-extrabold">Create your account</h1>
-        <p className="mt-2 text-muted-foreground">
-          Already have an account?{" "}
-          <Link
-            href="/login"
-            className="font-semibold text-primary hover:underline"
-          >
-            Log in
-          </Link>
-        </p>
-      </div>
+      <AuthHeader
+        title="Create your account"
+        description={
+          <>
+            Already have an account? <TextLink href="/login">Log in</TextLink>
+          </>
+        }
+      />
 
       <SignupForm initialAsInstructor={role === "INSTRUCTOR"} />
     </>

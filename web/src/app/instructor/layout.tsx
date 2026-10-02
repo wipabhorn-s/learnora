@@ -1,29 +1,6 @@
-import Sidebar, { SidebarItem } from "@/components/layout/Sidebar";
+import WorkspaceShell from "@/components/layout/WorkspaceShell";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-
-const ITEMS: SidebarItem[] = [
-  {
-    label: "Dashboard",
-    href: "/instructor/dashboard",
-    icon: "dashboard",
-  },
-  {
-    label: "My Courses",
-    href: "/instructor/courses",
-    icon: "courses",
-  },
-  {
-    label: "Create Course",
-    href: "/instructor/courses/new",
-    icon: "create-course",
-  },
-  {
-    label: "Profile",
-    href: "/instructor/profile",
-    icon: "profile",
-  },
-];
 
 export default async function InstructorLayout({
   children,
@@ -33,14 +10,13 @@ export default async function InstructorLayout({
   const session = await auth();
 
   if (!session) redirect("/login");
-  // ผู้เรียนที่ยังไม่เปิดสิทธิ์สอนส่งไปหน้า settings ให้กดเปิดเองได้เลย
+  // ยังไม่ได้เปิดสิทธิ์สอน ส่งไปหน้าที่อธิบายและมีปุ่มเปิดให้กดได้เลย
   // ดีกว่าเด้งกลับหน้าแรกแล้วไม่บอกว่าต้องทำอะไร
-  if (!session.user.isInstructor) redirect("/profile");
+  if (!session.user.isInstructor) redirect("/teach");
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar items={ITEMS} />
-      <main className="flex-1 overflow-auto p-8">{children}</main>
-    </div>
+    <WorkspaceShell workspace="teach" canTeach>
+      {children}
+    </WorkspaceShell>
   );
 }

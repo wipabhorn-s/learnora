@@ -32,10 +32,7 @@ export async function createLessonAction(
   formData.set("title", title.trim());
 
   try {
-    const lesson = await LessonApi.create(
-      formData,
-      session.user.access_token,
-    );
+    const lesson = await LessonApi.create(formData, session.user.access_token);
 
     return { success: true, lesson };
   } catch (error) {

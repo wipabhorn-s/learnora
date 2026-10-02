@@ -1,4 +1,4 @@
-import ConditionalFooter from "@/components/layout/ConditionalFooter";
+import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
 
 export default function PublicLayout({
@@ -10,7 +10,7 @@ export default function PublicLayout({
     <div className="flex min-h-screen flex-col">
       <Navbar />
       <main className="flex-1">{children}</main>
-      <ConditionalFooter />
+      <Footer />
     </div>
   );
 }

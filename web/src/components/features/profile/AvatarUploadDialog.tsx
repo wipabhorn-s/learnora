@@ -1,5 +1,6 @@
 "use client";
 
+import ImageCropper from "@/components/shared/ImageCropper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +16,15 @@ import {
   removeAvatarAction,
   updateAvatarAction,
 } from "@/lib/actions/user.action";
+import { cropImage, type CropArea } from "@/lib/crop-image";
+import { toast } from "@/lib/toast";
 import { Camera, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+
+/** รูปต้นฉบับใหญ่ได้ (ไม่ได้อัปโหลดตรง) เพราะตัดเหลือ 512×512 ก่อนส่งเสมอ */
+const MAX_SOURCE_SIZE = 15 * 1024 * 1024;
+const AVATAR_SIZE = 512;
 
 type AvatarUploadDialogProps = {
   avatarUrl: string | null;
@@ -31,20 +38,21 @@ export default function AvatarUploadDialog({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // รูปที่เลือกไว้ (object URL) กำลังจัดตำแหน่ง/ซูมอยู่ในตัวครอป
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
+  const [area, setArea] = useState<CropArea | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
     };
-  }, [previewUrl]);
+  }, [sourceUrl]);
 
   const resetSelection = () => {
-    setFile(null);
-    setPreviewUrl(null);
+    setSourceUrl(null);
+    setArea(null);
     setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -58,28 +66,46 @@ export default function AvatarUploadDialog({
       return;
     }
 
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      setError("Image must be smaller than 5 MB");
+    if (selectedFile.size > MAX_SOURCE_SIZE) {
+      setError("Image must be smaller than 15 MB");
       return;
     }
 
-    setFile(selectedFile);
-    setPreviewUrl(URL.createObjectURL(selectedFile));
+    setSourceUrl(URL.createObjectURL(selectedFile));
+    setArea(null);
     setError(null);
   };
 
   const handleSave = () => {
-    if (!file) return;
+    if (!sourceUrl || !area) return;
 
     startTransition(async () => {
+      let cropped: File;
+      try {
+        cropped = await cropImage(sourceUrl, area, {
+          maxWidth: AVATAR_SIZE,
+          maxHeight: AVATAR_SIZE,
+          fileName: "avatar.jpg",
+        });
+      } catch (cropError) {
+        setError(
+          cropError instanceof Error
+            ? cropError.message
+            : "Could not crop image",
+        );
+        return;
+      }
+
       const formData = new FormData();
-      formData.append("avatarUrl", file);
+      formData.append("avatarUrl", cropped);
 
       const result = await updateAvatarAction(formData);
       if (!result.success) {
-        setError(result.message);
+        toast.error(result.message);
         return;
       }
+
+      toast.success("Profile photo updated");
 
       setOpen(false);
       resetSelection();
@@ -98,9 +124,11 @@ export default function AvatarUploadDialog({
     startTransition(async () => {
       const result = await removeAvatarAction();
       if (!result.success) {
-        setError(result.message);
+        toast.error(result.message);
         return;
       }
+
+      toast.success("Profile photo removed");
 
       setOpen(false);
       resetSelection();
@@ -135,7 +163,9 @@ export default function AvatarUploadDialog({
         <DialogHeader>
           <DialogTitle>Edit profile picture</DialogTitle>
           <DialogDescription>
-            Choose an image up to 5 MB and preview it before saving.
+            {sourceUrl
+              ? "Drag and zoom to fit your face in the circle, then save."
+              : "Choose an image up to 15 MB. You can zoom and reposition it before saving."}
           </DialogDescription>
         </DialogHeader>
 
@@ -147,16 +177,26 @@ export default function AvatarUploadDialog({
           onChange={handleFileChange}
         />
 
-        <div className="flex flex-col items-center gap-3 py-4">
-          <Avatar className="h-48 w-48 border">
-            <AvatarImage
-              src={previewUrl ?? avatarUrl ?? undefined}
-              alt={`${firstName}'s profile picture`}
+        <div className="flex flex-col items-center gap-3 py-2">
+          {sourceUrl ? (
+            <ImageCropper
+              src={sourceUrl}
+              aspect={1}
+              shape="round"
+              onAreaChange={setArea}
+              className="w-full"
             />
-            <AvatarFallback className="bg-primary text-6xl font-extrabold text-white">
-              {firstName.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          ) : (
+            <Avatar className="h-48 w-48 border">
+              <AvatarImage
+                src={avatarUrl ?? undefined}
+                alt={`${firstName}'s profile picture`}
+              />
+              <AvatarFallback className="bg-primary text-6xl font-extrabold text-white">
+                {firstName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
@@ -169,16 +209,16 @@ export default function AvatarUploadDialog({
             disabled={isPending}
           >
             <Camera />
-            {file ? "Change photo" : "Choose photo"}
+            {sourceUrl ? "Choose another" : "Choose photo"}
           </Button>
-          {file ? (
+          {sourceUrl ? (
             <Button
               type="button"
               className="sm:flex-1"
               onClick={handleSave}
-              disabled={isPending}
+              disabled={isPending || !area}
             >
-              {isPending ? "Uploading ..." : "Save"}
+              {isPending ? "Uploading..." : "Save"}
             </Button>
           ) : (
             <Button
@@ -189,7 +229,7 @@ export default function AvatarUploadDialog({
               disabled={isPending || !avatarUrl}
             >
               <Trash2 />
-              {isPending ? "Removing ..." : "Remove photo"}
+              {isPending ? "Removing..." : "Remove photo"}
             </Button>
           )}
         </DialogFooter>

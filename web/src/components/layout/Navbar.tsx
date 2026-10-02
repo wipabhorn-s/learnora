@@ -1,12 +1,14 @@
-import { Button } from "@/components/ui/button";
-import Logo from "@/components/shared/Logo";
 import MobileNav from "@/components/layout/MobileNav";
 import SearchBar from "@/components/layout/SearchBar";
 import UserMenu from "@/components/layout/UserMenu";
+import Logo from "@/components/shared/Logo";
+import { Button } from "@/components/ui/button";
 import { CartApi } from "@/lib/api/cart.api";
 import { auth } from "@/lib/auth";
+import { getLastWorkspace } from "@/lib/workspace";
 import { Heart, ShoppingCart } from "lucide-react";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 export default async function Navbar() {
@@ -22,7 +24,9 @@ export default async function Navbar() {
     try {
       const cart = await CartApi.findAll(user.access_token);
       cartCount = cart.items.length;
-    } catch {
+    } catch (error) {
+      // session ใช้ไม่ได้แล้ว apiFetch จะ redirect ไปล็อกเอาต์ ห้ามกลืนไว้
+      unstable_rethrow(error);
       // Keep the navigation usable if a count request temporarily fails.
     }
   }
@@ -54,7 +58,9 @@ export default async function Navbar() {
 
         <div className="ml-2 hidden flex-1 md:flex">
           <Suspense
-            fallback={<div className="h-9 w-full max-w-xs rounded-xl bg-muted" />}
+            fallback={
+              <div className="h-9 w-full max-w-xs rounded-xl bg-muted" />
+            }
           >
             <SearchBar />
           </Suspense>
@@ -78,6 +84,7 @@ export default async function Navbar() {
                 avatarUrl={user.avatarUrl}
                 role={user.role}
                 isInstructor={user.isInstructor}
+                lastWorkspace={await getLastWorkspace()}
               />
             </>
           ) : (
