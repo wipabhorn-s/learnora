@@ -25,11 +25,20 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 
 ### Student
 - Browse and search courses with filters (category, level, price, keyword) and pagination
+- Course page with learning outcomes, requirements, curriculum and instructor bio
+- Public instructor profiles listing their published courses
 - Wishlist and shopping cart
-- Stripe checkout with success / failure pages and purchase history
+- Checkout through **Opn Payments** (formerly Omise): credit/debit card,
+  PromptPay QR, TrueMoney Wallet and mobile banking (KBank, SCB, KTB, BBL, BAY)
+- Free courses are enrolled in one click without going through the payment provider
+- Payment-pending page that tracks QR / bank-app / 3-D Secure payments until they settle
+- Purchase history, with refund requests **per course** (within 14 days, reviewed
+  by an admin; only that course's price is refunded)
+- Lesson videos are streamed through signed links that expire after 6 hours, so
+  shared links stop working
 - Course player with per-lesson progress (last position, max watched, completion)
 - Dashboard with enrolled courses and learning progress
-- Profile: edit personal info, upload/remove avatar, change password
+- Profile: edit personal info, upload/remove avatar
 
 ### Instructor
 - Create, edit, publish and delete courses (thumbnail upload via Cloudinary)
@@ -41,7 +50,13 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 - Admin dashboard with platform-wide statistics
 - Manage users (suspend / re-activate accounts)
 - Moderate courses (publish, suspend, delete)
-- Review payments and issue refunds
+- Revenue chart and recent payments on the dashboard
+- Review payments (filter by status, date range, "refund needed")
+- **Refund Requests** queue (one course per request): approve (partial refund
+  through Opn, or recorded manually with a transfer reference for PromptPay) or
+  decline with a reason; the student is emailed either way. Revenue figures
+  subtract partial refunds. Direct refunds from the Payments page are limited to
+  duplicate payments the system flagged
 - Super admin: create and manage admin accounts
 
 ### Auth and account security
@@ -49,8 +64,16 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
   account cannot log in until the link in the inbox is clicked
 - Sign in with Google (OAuth via NextAuth, ID token verified server-side)
 - Forgot password / reset password with single-use, hashed tokens
-- **Login & security** settings: connect or disconnect Google, set a first
-  password, and change the email address (password + confirmation link required)
+- **Strong password policy** shared by API and web: 8–72 printable ASCII characters
+  with lowercase, uppercase, number and symbol, plus a live checklist in the forms
+- **Two-factor authentication** by email: a 6-digit code is required after the
+  password (Google sign-in skips it because Google already verified the user)
+- **Login & security** settings: change password, connect or disconnect Google,
+  set a first password, change the email address (password + confirmation link
+  required), turn two-factor authentication on or off, and **delete the account**
+  (personal data is erased; anonymised receipts are kept for accounting)
+- **Login lockout**: 5 wrong passwords within 15 minutes lock that email for 15
+  minutes (counted per email, because the web server calls the API from one IP)
 - Roles: `STUDENT`, `ADMIN`, `SUPER ADMIN`. Teaching is a **capability**
   (`isInstructor`), not a role, so one account can buy, learn and teach
 
@@ -67,7 +90,7 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 | Auth (web) | NextAuth v5 (Credentials + Google provider, JWT session) |
 | UI | Tailwind CSS 4, shadcn/ui, Base UI, lucide-react |
 | Forms | react-hook-form + Zod |
-| Payments | Stripe (Payment Intents) |
+| Payments | Opn Payments / Omise (REST API + Omise.js card tokenization) |
 | Media | Cloudinary (avatars, thumbnails, lesson videos) |
 | Package manager | pnpm |
 
@@ -79,30 +102,35 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 learnora/
 ├── api/                        # NestJS REST API
 │   ├── prisma/schema.prisma    # database schema
+│   ├── prisma/migrations/      # versioned schema changes (prisma migrate)
+│   ├── scripts/                # one-off / dev scripts (db:del, videos:protect)
 │   └── src/
-│       ├── auth/               # login, register, Google, password reset, guards
-│       ├── user/               # profile, avatar, change password
+│       ├── auth/               # login, 2FA codes, register, Google, password reset, guards
+│       ├── user/               # profile, avatar, login & security settings
 │       ├── course/             # course CRUD + catalog
 │       ├── lesson/             # lesson CRUD + reordering
 │       ├── cart/  wishlist/    # cart and wishlist
-│       ├── purchase/           # Stripe checkout + orders
+│       ├── purchase/           # Opn checkout, webhook, reconcile job, orders
 │       ├── learning/           # enrolled courses, player, progress
 │       ├── dashboard/          # student & instructor dashboards
 │       ├── admin/              # admin console endpoints
-│       ├── infrastructure/     # bcrypt, jwt, Cloudinary, Stripe
-│       ├── common/             # decorators (@Public, @Roles, @CurrentUser)
+│       ├── payout/             # instructor earnings (revenue share) and payouts
+│       ├── infrastructure/     # bcrypt, jwt, Cloudinary, Brevo mail, Opn payments
+│       ├── common/             # decorators (@Public, @Roles, @CurrentUser, @StrongPassword), utils (pagination, dates)
 │       └── config/             # env validation (Zod)
 └── web/                        # Next.js client
     └── src/
         ├── app/
-        │   ├── (auth)/         # login, signup, forgot/reset password
+        │   ├── (auth)/         # login (+ 2FA code step), signup, verify email, forgot/reset password
         │   ├── (public)/       # landing page, course catalog & detail
-        │   ├── (student)/      # dashboard, my courses, cart, wishlist, profile
-        │   ├── (checkout)/     # Stripe checkout and result pages
+        │   ├── (student)/      # dashboard, my courses, cart, wishlist, purchase history, teach
+        │   ├── (account)/      # profile and login & security settings
+        │   ├── (checkout)/     # Opn checkout, payment pending and result pages
         │   ├── (player)/       # course player
         │   ├── instructor/     # instructor console
-        │   └── admin/          # admin console
-        ├── components/         # features/, layout/, shared/, ui/
+        │   ├── admin/          # admin console
+        │   └── session-expired/ # signs out and redirects when the API rejects the token
+        ├── components/         # features/, layout/, shared/ (reused building blocks), ui/, home/, magic/ (night-sky decoration)
         └── lib/
             ├── actions/        # server actions (the only thing pages call)
             ├── api/            # typed fetch wrappers for the NestJS API
@@ -123,7 +151,7 @@ The web app never calls the API from the browser: pages and client components ca
 - Node.js 20+
 - pnpm
 - PostgreSQL 14+ (with the `citext` extension available)
-- Accounts for: Google Cloud (OAuth client), Cloudinary, Stripe
+- Accounts for: Google Cloud (OAuth client), Cloudinary, Brevo, Opn Payments (test keys are enough)
 
 ### 1. Clone and install
 
@@ -148,21 +176,34 @@ Fill in the values — see [Environment variables](#environment-variables).
 
 ```bash
 cd api
-pnpm exec prisma db push         # create tables
+pnpm exec prisma migrate deploy  # create/upgrade tables from prisma/migrations
 pnpm exec prisma generate        # generate the Prisma client
 ```
 
-On a database that already holds users, run the backfill once so existing
-instructors keep their teaching rights and nobody is locked out by the new
-email verification gate:
+The schema is versioned in `api/prisma/migrations` (the first one, `0_init`, also
+enables the `citext` extension used for case-insensitive emails).
+
+**Changing the schema** — edit `schema.prisma`, then
+`pnpm exec prisma migrate dev --name <what-changed>` creates a migration and
+applies it locally. Commit the new folder; production runs `migrate deploy`.
+Don't use `prisma db push` any more — it changes the database without a
+migration, so production would drift.
+
+**Existing database that was created with `db push`** (before migrations
+existed) — mark the baseline as already applied instead of re-creating tables:
+
+```bash
+pnpm exec prisma migrate resolve --applied 0_init
+pnpm exec prisma migrate deploy
+```
+
+On a database that already holds users from before the teaching/role split, run
+the backfill once so existing instructors keep their teaching rights and nobody
+is locked out by email verification:
 
 ```bash
 psql "$DATABASE_URL" -f prisma/backfill-instructor-capability.sql
 ```
-
-> The schema uses the `citext` type for emails so that `Ann@mail.com` and
-> `ann@mail.com` are treated as the same address. Enable it once per database:
-> `CREATE EXTENSION IF NOT EXISTS citext;`
 
 ### 4. Run both apps
 
@@ -187,13 +228,15 @@ cd web && pnpm dev              # http://localhost:3000
 | `ACCESS_TOKEN_SECRET` | JWT signing secret, at least 32 characters |
 | `ACCESS_TOKEN_EXPIRES_IN` | Access token lifetime in seconds (e.g. `86400`) |
 | `FRONTEND_URL` | Base URL used to build the links sent by email |
-| `RESET_TOKEN_EXPIRES_IN` | Password-reset link lifetime in seconds (e.g. `900`) |
+| `RESET_TOKEN_EXPIRES_IN` | Password-reset link lifetime in seconds (e.g. `600`) |
 | `EMAIL_VERIFICATION_TOKEN_EXPIRES_IN` | Verification link lifetime in seconds (e.g. `86400`) |
-| `BREVO_API_KEY` | Brevo API key — optional, but sending email fails with 503 without it |
+| `BREVO_API_KEY` | Brevo API key (required) |
 | `MAIL_FROM` / `MAIL_FROM_NAME` | Sender address (must be verified in Brevo) and display name |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID — must match the one used by the web app |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Cloudinary credentials |
-| `STRIPE_SECRET_KEY` | Stripe secret key |
+| `OMISE_SECRET_KEY` | Opn Payments secret key (`skey_test_...` / `skey_...`) |
+| `OMISE_WEBHOOK_SECRET` | Webhook signing secret from Opn Dashboard → Webhooks (base64). Optional in development; without it signatures are not checked and a warning is logged in production |
+| `INSTRUCTOR_REVENUE_SHARE_PERCENT` | Instructors' share of each sale, 0–100 (default `70`); the rest is the platform's |
 
 Env vars are validated with Zod at boot (`src/config/env.validation.ts`) — the API
 refuses to start if anything is missing or malformed.
@@ -204,10 +247,11 @@ refuses to start if anything is missing or malformed.
 | --- | --- |
 | `API_URL` | Base URL of the NestJS API (e.g. `http://localhost:8000`) |
 | `AUTH_SECRET` | NextAuth session encryption secret |
-| `NEXTAUTH_URL` | Public URL of the web app (e.g. `http://localhost:3000`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth client credentials |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same client ID, exposed to the browser for the connect-account button |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key |
+| `NEXT_PUBLIC_OMISE_PUBLIC_KEY` | Opn Payments public key (`pkey_test_...`), used by Omise.js to tokenize cards in the browser |
+
+The web app validates these with Zod as well (`src/lib/env.ts`).
 
 > Both apps must use the **same** `GOOGLE_CLIENT_ID`: the web app obtains the Google
 > ID token and the API verifies its audience against that client ID.
@@ -220,20 +264,33 @@ refuses to start if anything is missing or malformed.
 User ──< Course (as instructor)
 User ──< Wishlist >── Course
 User ──< CartItem >── Course
+User ──< OneTimeCode
 User ──< Purchase ──< PurchaseItem >── Course
 Course ──< Lesson ──< LessonProgress >── PurchaseItem
 ```
 
 - **User** — `role` (regular user vs. admin), `isInstructor` (teaching
   capability), `status` (suspended flag), `emailVerifiedAt`, optional `password`
-  (null for Google-only accounts) and optional `googleId`.
+  (null for Google-only accounts), optional `googleId`, `twoFactorEnabled`
+  and an optional instructor `bio` (edited on the profile page, shown on course pages).
 - **EmailVerificationToken / PasswordResetToken** — single-use links. Only a
   sha256 hash of each token is stored, and `pendingEmail` holds the address
   waiting to be confirmed during an email change.
+- **OneTimeCode** — 6-digit email codes for 2FA (`LOGIN`, `ENABLE_TWO_FACTOR`).
+  Stored as an HMAC keyed by the server secret, valid for 10 minutes, single-use,
+  and locked after 5 wrong attempts.
 - **Course** — category, level, price, access type (`LIFETIME` / `LIMITED` with a
-  duration), publishing status.
+  duration), publishing status, an optional `subtitle`, and the `learningOutcomes`
+  / `requirements` lists shown on the course page.
 - **Purchase / PurchaseItem** — an order and its lines; a `PurchaseItem` is the
-  enrollment record, carrying `expiresAt` and `enrollmentStatus`.
+  enrollment record, carrying `expiresAt` and `enrollmentStatus`. A purchase stores
+  its `paymentMethod` (`FREE`, `CARD`, `PROMPTPAY`, `TRUEMONEY`, `MOBILE_BANKING`),
+  the Opn `chargeId`, `cancelledAt` (superseded by a newer checkout),
+  `manualRefundNeeded` and `refundReference`.
+- **RefundRequest** — one per purchased course (`PurchaseItem`): the student's
+  reason, status (`PENDING` / `APPROVED` / `REJECTED`), the admin's note, the
+  manual transfer reference and who reviewed it. `Purchase.refundedAmount`
+  tracks partial refunds; when it reaches the total the order becomes `REFUNDED`.
 - **LessonProgress** — per enrollment and lesson: last position, furthest watched
   second and completion flag.
 
@@ -250,7 +307,9 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | Method | Path | Description |
 | --- | --- | --- |
 | POST | `/auth/register` | Register with email and password |
-| POST | `/auth/login` | Log in, returns `access_token` + user |
+| POST | `/auth/login` | Log in, returns `access_token` + user, or `{ codeRequired, challengeId }` when 2FA is on |
+| POST | `/auth/login/code` | Finish a 2FA login with the 6-digit code |
+| POST | `/auth/login/code/resend` | Send a new login code (30-second cooldown) |
 | POST | `/auth/google` | Exchange a Google ID token for an access token |
 | GET | `/auth/profile` | Current user (requires auth) |
 | POST | `/auth/verify-email` | Confirm a signup or an email change |
@@ -261,7 +320,7 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 ### Users — `/users`
 | Method | Path | Description |
 | --- | --- | --- |
-| PATCH | `/users/me` | Update first/last name |
+| PATCH | `/users/me` | Update first/last name and instructor bio |
 | PATCH | `/users/me/avatar` | Upload an avatar (multipart) |
 | DELETE | `/users/me/avatar` | Remove the avatar |
 | PATCH | `/users/me/password` | Change password (requires the current one) |
@@ -270,13 +329,19 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | POST | `/users/me/google` | Connect a Google account (verified ID token) |
 | DELETE | `/users/me/google` | Disconnect Google (blocked without a password) |
 | POST | `/users/me/email-change` | Request an email change (password required) |
+| POST | `/users/me/two-factor/request` | Email a code to start enabling 2FA |
+| POST | `/users/me/two-factor/confirm` | Confirm the code and turn 2FA on |
+| POST | `/users/me/two-factor/disable` | Turn 2FA off |
 | POST | `/users/me/instructor` | Enable teaching; returns a refreshed access token |
+| POST | `/users/me/delete/request-code` | Accounts without a password: confirm the account email and get a 6-digit code |
+| POST | `/users/me/delete` | Delete own account with `{ password }`, or `{ challengeId, code }` for accounts without a password |
 
 ### Courses — `/courses`
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/courses` | Public catalog with filters and pagination |
 | GET | `/courses/:courseId` | Public course detail |
+| GET | `/instructors/:instructorId` | Public instructor profile: bio, stats and published courses |
 | GET | `/courses/mine` | Instructor's own courses |
 | GET | `/courses/mine/:courseId` | Instructor's course detail (for editing) |
 | POST | `/courses` | Create a course |
@@ -299,8 +364,12 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | DELETE | `/cart/:courseId` | Remove a cart item |
 | GET | `/wishlist`, `/wishlist/course-ids` | Wishlist contents |
 | POST / DELETE | `/wishlist`, `/wishlist/:courseId` | Add / remove |
-| POST | `/purchases/checkout` | Create a Stripe payment intent |
-| GET | `/purchases`, `/purchases/:purchaseId` | Purchase history and detail |
+| POST | `/purchases/checkout` | Pay for the cart through Opn (card token, PromptPay, TrueMoney or mobile banking) |
+| POST | `/purchases/enroll-free/:courseId` | Enroll in a free course directly |
+| GET | `/purchases/:purchaseId/progress` | Payment status, QR code / authorize URL while pending |
+| GET | `/purchases`, `/purchases/:purchaseId` | Purchase history and detail (includes refund request status and deadline) |
+| POST | `/purchases/items/:purchaseItemId/refund-request` | Ask for a refund of one course (reason required, once per course, within 14 days) |
+| POST | `/payments/opn/webhook` | Opn webhook (`charge.complete`), public, signature-checked |
 
 ### Learning — `/my-courses`
 | Method | Path | Description |
@@ -316,8 +385,15 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | GET | `/admin/dashboard` | Platform statistics |
 | GET / PATCH | `/admin/users`, `/admin/users/:userId/status` | User management |
 | GET / PATCH | `/admin/courses`, `/admin/courses/:courseId/status` | Course moderation |
-| GET | `/admin/payments` | Payment list |
-| POST | `/admin/payments/:purchaseId/refund` | Refund a purchase |
+| GET | `/admin/payments` | Payment list (status, date range, refund-needed filters) |
+| POST | `/admin/payments/:purchaseId/refund` | Refund through Opn, or `{ manual: true, reference }` to record a manual transfer |
+| GET | `/admin/refund-requests` | Refund requests with the student's progress in that course |
+| POST | `/admin/refund-requests/:requestId/approve` | Approve and refund that course only (same body as the refund endpoint) |
+| POST | `/admin/refund-requests/:requestId/reject` | Decline with `{ note }` shown to the student |
+| GET | `/admin/payouts` | Each instructor's pending / available / paid-out earnings and payout account, plus recent payouts |
+| POST | `/admin/payouts` | Record a bank transfer to an instructor `{ instructorId, amount, reference }` (can't exceed the available balance) |
+| GET | `/instructor/earnings` | The instructor's earnings summary, payout account and payout history |
+| PUT | `/instructor/earnings/account` | Save the bank account used for payouts |
 | GET / POST / PATCH | `/admins`, `/admins/:adminId/status` | Admin accounts (super admin) |
 
 ---
@@ -331,6 +407,16 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 3. The API verifies the password with bcrypt and signs a JWT access token.
 4. The token is stored in the NextAuth JWT session and attached to every
    subsequent API call.
+
+**Two-factor authentication** — when `twoFactorEnabled` is on, step 3 returns
+`{ codeRequired: true, challengeId }` instead of a token and emails a 6-digit
+code. The web app keeps `challengeId` in an httpOnly cookie
+(`src/lib/login-challenge.ts`) and shows `LoginCodeStep`; `POST /auth/login/code`
+checks the code and only then issues the access token.
+
+**Expired session** — when the API answers 401 for a stored token, the web app
+sends the user to `/session-expired`, which clears the NextAuth session and
+redirects to the login page.
 
 **Google**
 
@@ -352,6 +438,42 @@ hash, writes the new bcrypt hash and marks the token used so the link cannot be
 replayed. The endpoint always answers with the same message so that registered
 emails cannot be enumerated.
 
+**Payments (Opn)**
+
+1. Card numbers never touch our servers: `CheckoutForm` loads Omise.js from Opn's
+   CDN and turns the card into a one-time `tokn_...` token in the browser.
+2. `POST /purchases/checkout` creates a `PENDING` purchase and an Opn charge. Cards
+   may need 3-D Secure; PromptPay returns a QR code (valid 10 minutes); TrueMoney and
+   mobile banking return an authorize URL. The web app then shows `/checkout/pending`.
+   Opn's minimum charge is ฿20.
+3. The purchase is settled from three places — the pending page polling
+   `/purchases/:id/progress`, the `charge.complete` webhook, and a reconcile job that
+   runs every 2 minutes. Each one **asks Opn for the charge status itself** instead
+   of trusting the caller, and every step is idempotent, so courses are never
+   unlocked or refunded twice.
+4. Starting a new checkout cancels the previous pending one. If that old charge is
+   paid later anyway (e.g. an old QR was scanned), the courses are unlocked, or the
+   payment is refunded if the student already owns them. Methods Opn cannot refund
+   (PromptPay) are flagged `manualRefundNeeded` for an admin to transfer back by hand.
+
+**Webhook in production** — in Opn Dashboard (live mode) → Webhooks, set the URL
+to `https://<your-api-host>/payments/opn/webhook`, copy the signing secret into
+`OMISE_WEBHOOK_SECRET`, and switch `OMISE_SECRET_KEY` (API) and
+`NEXT_PUBLIC_OMISE_PUBLIC_KEY` (web) to the live `skey_...` / `pkey_...` keys.
+Test mode and live mode have separate webhooks and keys. For local testing,
+expose the API (e.g. with ngrok) and point a test-mode webhook at it. Without a
+webhook the reconcile job still settles payments, just a little later.
+
+**Instructor payouts** — instructors get `INSTRUCTOR_REVENUE_SHARE_PERCENT` of
+every paid sale. A sale becomes *available* once its 14-day refund window has
+closed and it has no refund request under review; until then it is *pending*.
+Instructors add their bank account on **Teach → Earnings**. Admins see who is
+owed on **Admin → Payouts**, transfer the money from the bank themselves, then
+record the amount and transfer reference — the instructor gets an email. The
+API locks the instructor row while recording, so two admins can't pay out the
+same balance twice. If an admin refunds a sale after it was paid out, the
+instructor's balance goes negative and is taken from the next payout.
+
 **Roles vs. capabilities** — `role` only separates regular users from admins.
 Teaching lives in `isInstructor`, checked by `InstructorGuard` and carried in the
 access token, so a single account can buy courses, study them and publish its
@@ -368,9 +490,14 @@ own. Enabling it returns a fresh access token, since the old one still claims
 | `pnpm start:dev` | Start in watch mode |
 | `pnpm build` / `pnpm start:prod` | Build and run the compiled app |
 | `pnpm lint` / `pnpm format` | ESLint (with `--fix`) / Prettier |
-| `pnpm test` / `pnpm test:e2e` / `pnpm test:cov` | Jest unit / e2e / coverage |
-| `pnpm exec prisma migrate dev` | Apply migrations |
+| `pnpm test` | Unit tests (payment settlement, refunds, webhook signatures) — no database needed |
+| `pnpm test:e2e` | HTTP tests against the whole app — needs `api/.env` and a running database (read-only) |
+| `pnpm test:cov` | Unit tests with coverage |
+| `pnpm exec prisma migrate dev --name <change>` | Create and apply a migration after editing `schema.prisma` |
+| `pnpm exec prisma migrate deploy` | Apply pending migrations (production / fresh databases) |
 | `pnpm exec prisma studio` | Browse the database |
+| `pnpm db:del` | Development only: wipe everything except users, courses and lessons (orders, refunds, payouts, carts, tokens…) |
+| `pnpm videos:protect` | One-off: move lesson videos uploaded before signed delivery to Cloudinary's authenticated type (`--dry-run` to preview) |
 
 ### `web/`
 | Command | Description |
@@ -378,3 +505,4 @@ own. Enabling it returns a fresh access token, since the old one still claims
 | `pnpm dev` | Start the dev server |
 | `pnpm build` / `pnpm start` | Production build and server |
 | `pnpm lint` | ESLint |
+| `pnpm test` / `pnpm test:watch` | Vitest + Testing Library: card checks, formatting, form schemas, refund rules and key components (no API needed) |
