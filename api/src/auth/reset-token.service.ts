@@ -55,6 +55,17 @@ export class ResetTokenService {
     });
   }
 
+  /** เวลาที่ออกลิงก์ที่ยังไม่ถูกใช้ล่าสุด ใช้กันการกดส่งซ้ำถี่ ๆ */
+  async lastIssuedAt(userId: string): Promise<Date | null> {
+    const latest = await this.prisma.passwordResetToken.findFirst({
+      where: { userId, usedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+
+    return latest?.createdAt ?? null;
+  }
+
   markUsed(id: string) {
     return this.prisma.passwordResetToken.update({
       where: { id },

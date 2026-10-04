@@ -4,8 +4,12 @@ import { AdminService } from '@/admin/admin.service';
 import { FindAdminCoursesDto } from '@/admin/dto/find-admin-courses.dto';
 import { FindPaymentsDto } from '@/admin/dto/find-payments.dto';
 import { FindUsersDto } from '@/admin/dto/find-users.dto';
+import { RefundPurchaseDto } from '@/admin/dto/refund-purchase.dto';
+import { FindRefundRequestsDto } from '@/admin/dto/find-refund-requests.dto';
+import { RejectRefundRequestDto } from '@/admin/dto/reject-refund-request.dto';
 import { Role } from '@/database/generated/prisma/enums';
 import {
+  Body,
   Controller,
   Get,
   Patch,
@@ -55,7 +59,33 @@ export class AdminController {
   }
 
   @Post('payments/:purchaseId/refund')
-  refundPurchase(@Param('purchaseId', ParseUUIDPipe) purchaseId: string) {
-    return this.adminService.refundPurchase(purchaseId);
+  refundPurchase(
+    @Param('purchaseId', ParseUUIDPipe) purchaseId: string,
+    @Body() dto: RefundPurchaseDto,
+  ) {
+    return this.adminService.refundPurchase(purchaseId, dto);
+  }
+
+  @Get('refund-requests')
+  findRefundRequests(@Query() dto: FindRefundRequestsDto) {
+    return this.adminService.findRefundRequests(dto);
+  }
+
+  @Post('refund-requests/:requestId/approve')
+  approveRefundRequest(
+    @CurrentUser('sub') adminId: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Body() dto: RefundPurchaseDto,
+  ) {
+    return this.adminService.approveRefundRequest(adminId, requestId, dto);
+  }
+
+  @Post('refund-requests/:requestId/reject')
+  rejectRefundRequest(
+    @CurrentUser('sub') adminId: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Body() dto: RejectRefundRequestDto,
+  ) {
+    return this.adminService.rejectRefundRequest(adminId, requestId, dto);
   }
 }

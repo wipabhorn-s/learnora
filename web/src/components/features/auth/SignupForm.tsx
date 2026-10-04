@@ -1,6 +1,9 @@
 "use client";
 
+import { useAuthRole } from "@/components/features/auth/AuthRole";
 import GoogleButton from "@/components/features/auth/GoogleButton";
+import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
+import TextLink from "@/components/shared/TextLink";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,11 +13,13 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { registerAction } from "@/lib/actions/auth.action";
 import { SignupInput, signupSchema } from "@/lib/schemas/auth.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle } from "lucide-react";
-import { useTransition } from "react";
+import { useEffect, useTransition } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 
 export default function SignupForm({
@@ -26,9 +31,12 @@ export default function SignupForm({
     control,
     handleSubmit,
     setError,
+    clearErrors,
     formState: { errors },
   } = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
+    // ตรวจซ้ำเฉพาะตอนกดส่ง ระหว่างพิมพ์แก้ให้ error หายไปก่อน (ดู clearOnEdit)
+    reValidateMode: "onSubmit",
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -40,6 +48,18 @@ export default function SignupForm({
   });
 
   const [isPending, startTransition] = useTransition();
+
+  /**
+   * เริ่มพิมพ์แก้ช่องไหน กรอบแดงกับข้อความของช่องนั้นหายทันที ไม่ต้องรอให้
+   * ค่าถูกก่อน ส่วนรหัสผ่านกับยืนยันรหัสผ่านผูกกันอยู่ ("ไม่ตรงกัน" เกิดจาก
+   * ช่องไหนก็ได้) จึงล้างพร้อมกันทั้งคู่ไม่ว่าจะแก้ช่องไหนก่อน
+   */
+  const clearOnEdit = (name: keyof SignupInput) =>
+    clearErrors(
+      name === "password" || name === "confirmPassword"
+        ? ["password", "confirmPassword"]
+        : name,
+    );
 
   const onSubmit = (data: SignupInput) => {
     startTransition(async () => {
@@ -55,29 +75,29 @@ export default function SignupForm({
   // เพื่อส่งเจตนาเดียวกันไปกับทั้งสองทาง (useWatch แทน watch เพราะ memo ได้)
   const asInstructor = useWatch({ control, name: "isInstructor" });
 
+  // ให้ตัวละครฝั่งซ้าย (AuthHero) เปลี่ยนตาม role ที่เลือก ออกจากหน้านี้แล้วกลับเป็นนักเรียน
+  const { setRole } = useAuthRole();
+  useEffect(() => {
+    setRole(asInstructor ? "instructor" : "student");
+  }, [asInstructor, setRole]);
+  useEffect(() => () => setRole("student"), [setRole]);
+
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       {/* เลือกว่าจะเปิดสิทธิ์สอนให้ตั้งแต่แรกไหม — เปลี่ยนทีหลังได้ในหน้า settings */}
       <Controller
         control={control}
         name="isInstructor"
         render={({ field }) => (
-          <div className="flex rounded-xl bg-muted p-1">
-            {([false, true] as const).map((value) => (
-              <button
-                key={String(value)}
-                type="button"
-                onClick={() => field.onChange(value)}
-                className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-all ${
-                  field.value === value
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {value ? "Register as Instructor" : "Register as Student"}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            fullWidth
+            options={[
+              { value: false, label: "Register as Student" },
+              { value: true, label: "Register as Instructor" },
+            ]}
+            value={field.value}
+            onChange={field.onChange}
+          />
         )}
       />
 
@@ -89,8 +109,8 @@ export default function SignupForm({
         <div className="h-px flex-1 bg-border" />
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <FieldGroup className="gap-4">
+      <form method="post" onSubmit={handleSubmit(onSubmit)}>
+        <FieldGroup className="gap-3">
           {errors.root && (
             <Alert
               variant="destructive"
@@ -107,11 +127,17 @@ export default function SignupForm({
               name="firstName"
               render={({ field, fieldState }) => (
                 <Field className="gap-1" data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={field.name}>First name</FieldLabel>
+                  <FieldLabel required htmlFor={field.name}>
+                    First name
+                  </FieldLabel>
                   <Input
-                    placeholder="Sarah"
+                    placeholder="Enter your first name"
                     id={field.name}
                     {...field}
+                    onChange={(event) => {
+                      field.onChange(event);
+                      clearOnEdit(field.name);
+                    }}
                     aria-invalid={fieldState.invalid}
                   />
                   {fieldState.invalid && (
@@ -126,11 +152,17 @@ export default function SignupForm({
               name="lastName"
               render={({ field, fieldState }) => (
                 <Field className="gap-1" data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={field.name}>Last name</FieldLabel>
+                  <FieldLabel required htmlFor={field.name}>
+                    Last name
+                  </FieldLabel>
                   <Input
-                    placeholder="Chen"
+                    placeholder="Enter your last name"
                     id={field.name}
                     {...field}
+                    onChange={(event) => {
+                      field.onChange(event);
+                      clearOnEdit(field.name);
+                    }}
                     aria-invalid={fieldState.invalid}
                   />
                   {fieldState.invalid && (
@@ -146,12 +178,18 @@ export default function SignupForm({
             name="email"
             render={({ field, fieldState }) => (
               <Field className="gap-1" data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor={field.name}>Email address</FieldLabel>
+                <FieldLabel required htmlFor={field.name}>
+                  Email address
+                </FieldLabel>
                 <Input
-                  placeholder="you@example.com"
+                  placeholder="Enter your email"
                   type="email"
                   id={field.name}
                   {...field}
+                  onChange={(event) => {
+                    field.onChange(event);
+                    clearOnEdit(field.name);
+                  }}
                   aria-invalid={fieldState.invalid}
                 />
                 {fieldState.invalid && (
@@ -161,50 +199,69 @@ export default function SignupForm({
             )}
           />
 
-          <Controller
-            control={control}
-            name="password"
-            render={({ field, fieldState }) => (
-              <Field className="gap-1" data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor={field.name}>Password</FieldLabel>
-                <Input
-                  placeholder="At least 8 characters"
-                  type="password"
-                  id={field.name}
-                  {...field}
-                  aria-invalid={fieldState.invalid}
-                />
-                {fieldState.invalid && (
-                  <FieldError errors={[fieldState.error]} />
-                )}
-              </Field>
-            )}
-          />
+          {/* จอกว้าง: รหัสผ่านกับยืนยันรหัสผ่านอยู่แถวเดียวกัน ฟอร์มจะได้พอดีหนึ่งหน้าจอ */}
+          <div className="grid items-start gap-3 sm:grid-cols-2">
+            <Controller
+              control={control}
+              name="password"
+              render={({ field, fieldState }) => (
+                <Field className="gap-1" data-invalid={fieldState.invalid}>
+                  <FieldLabel required htmlFor={field.name}>
+                    Password
+                  </FieldLabel>
+                  <PasswordInput
+                    placeholder="Enter password"
+                    id={field.name}
+                    {...field}
+                    onChange={(event) => {
+                      field.onChange(event);
+                      clearOnEdit(field.name);
+                    }}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                  <PasswordChecklist value={field.value} />
+                </Field>
+              )}
+            />
 
-          <Controller
-            control={control}
-            name="confirmPassword"
-            render={({ field, fieldState }) => (
-              <Field className="gap-1" data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor={field.name}>Confirm password</FieldLabel>
-                <Input
-                  placeholder="Repeat your password"
-                  type="password"
-                  id={field.name}
-                  {...field}
-                  aria-invalid={fieldState.invalid}
-                />
-                {fieldState.invalid && (
-                  <FieldError errors={[fieldState.error]} />
-                )}
-              </Field>
-            )}
-          />
+            <Controller
+              control={control}
+              name="confirmPassword"
+              render={({ field, fieldState }) => (
+                <Field className="gap-1" data-invalid={fieldState.invalid}>
+                  <FieldLabel required htmlFor={field.name}>
+                    Confirm password
+                  </FieldLabel>
+                  <PasswordInput
+                    placeholder="Repeat password"
+                    id={field.name}
+                    {...field}
+                    onChange={(event) => {
+                      field.onChange(event);
+                      clearOnEdit(field.name);
+                    }}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
+          </div>
 
           <Field className="gap-1">
-            <Button type="submit" disabled={isPending} className="py-5">
-              {isPending ? "Creating account ..." : "Create Account"}
+            <Button type="submit" disabled={isPending} size="lg">
+              {isPending ? "Creating account..." : "Create Account"}
             </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              By creating an account, you agree to our{" "}
+              <TextLink href="/terms">Terms of Service</TextLink> and{" "}
+              <TextLink href="/privacy">Privacy Policy</TextLink>.
+            </p>
           </Field>
         </FieldGroup>
       </form>

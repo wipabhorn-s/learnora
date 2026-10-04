@@ -1,26 +1,44 @@
+import AuthHeader from "@/components/features/auth/AuthHeader";
 import LoginForm from "@/components/features/auth/LoginForm";
+import TextLink from "@/components/shared/TextLink";
 import { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = { title: "Log In | Learnora" };
 
-export default function LoginPage() {
+/**
+ * NextAuth ส่งผู้ใช้กลับมาที่หน้านี้พร้อม ?error= เมื่อล็อกอินด้วย Google ไม่ผ่าน
+ * (เช่น API ล่ม, บัญชีโดนระงับ, กดยกเลิกที่หน้า Google) เดิมไม่แสดงอะไรเลย
+ * ผู้ใช้เลยเห็นแค่ว่ากดแล้วเด้งกลับมาหน้าเดิม
+ */
+const OAUTH_ERRORS: Record<string, string> = {
+  AccessDenied: "Google sign-in was cancelled. Please try again.",
+};
+const OAUTH_ERROR_FALLBACK =
+  "We couldn't sign you in with Google. Please try again in a moment.";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+  const oauthError = error
+    ? (OAUTH_ERRORS[error] ?? OAUTH_ERROR_FALLBACK)
+    : null;
+
   return (
     <>
-      <div>
-        <h1 className="text-3xl font-extrabold">Log in to Learnora</h1>
-        <p className="mt-2 text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/signup"
-            className="font-semibold text-primary hover:underline"
-          >
-            Sign up free
-          </Link>
-        </p>
-      </div>
+      <AuthHeader
+        title="Log in to Learnora"
+        description={
+          <>
+            Don&apos;t have an account?{" "}
+            <TextLink href="/signup">Sign up free</TextLink>
+          </>
+        }
+      />
 
-      <LoginForm />
+      <LoginForm initialError={oauthError} />
     </>
   );
 }

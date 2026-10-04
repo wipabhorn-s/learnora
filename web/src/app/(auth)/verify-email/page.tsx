@@ -1,3 +1,4 @@
+import AuthHeader from "@/components/features/auth/AuthHeader";
 import { Button } from "@/components/ui/button";
 import { verifyEmailAction } from "@/lib/actions/auth.action";
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -19,36 +20,33 @@ export default async function VerifyEmailPage({
 
   const result = token
     ? await verifyEmailAction(token)
-    : ({
+    : {
         success: false as const,
         message: "This link is missing its verification token",
         code: "INVALID_TOKEN",
-      });
+      };
 
   return (
-    <div className="grid gap-6 text-center">
-      {result.success ? (
-        <CheckCircle2 className="mx-auto h-12 w-12 text-primary" />
-      ) : (
-        <XCircle className="mx-auto h-12 w-12 text-destructive" />
-      )}
-
-      <div>
-        <h1 className="text-2xl font-extrabold">
-          {result.success ? "You're all set" : "We couldn't verify that link"}
-        </h1>
-        <p className="mt-2 text-muted-foreground">{result.message}</p>
-      </div>
+    <>
+      <AuthHeader
+        icon={result.success ? CheckCircle2 : XCircle}
+        tone={result.success ? "primary" : "destructive"}
+        title={
+          result.success ? "You're all set" : "We couldn't verify that link"
+        }
+        description={result.message}
+      />
 
       <Button
         nativeButton={false}
-        className="py-5"
+        size="lg"
+        className="w-full"
         render={
           <Link href={result.success ? "/login" : "/verify-email/sent"}>
             {result.success ? "Log in" : "Get a new link"}
           </Link>
         }
       />
-    </div>
+    </>
   );
 }

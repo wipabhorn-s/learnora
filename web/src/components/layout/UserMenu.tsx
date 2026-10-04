@@ -1,6 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/lib/actions/auth.action";
+import { Workspace, WORKSPACE_HOME } from "@/lib/constants/workspace";
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 
@@ -17,13 +18,19 @@ export default function UserMenu({
   avatarUrl,
   role,
   isInstructor = false,
+  lastWorkspace = "learn",
 }: {
   firstName: string;
   avatarUrl: string | null;
   role: Role;
   isInstructor?: boolean;
+  lastWorkspace?: Workspace;
 }) {
-  const dashboardHref = DASHBOARD_ROUTES[role];
+  // ผู้สอนที่ทำงานฝั่งสอนเป็นหลัก กดรูปโปรไฟล์แล้วกลับไปฝั่งสอนเลย
+  const dashboardHref =
+    role === "STUDENT" && isInstructor
+      ? WORKSPACE_HOME[lastWorkspace]
+      : DASHBOARD_ROUTES[role];
 
   return (
     <div className="flex items-center gap-2">

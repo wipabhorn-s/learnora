@@ -79,7 +79,11 @@ export class LessonService {
         omit: { videoPublicId: true },
       });
     } catch (error) {
-      await this.cloudinaryService.deleteAsset(video.publicId, 'video');
+      await this.cloudinaryService.deleteAsset(
+        video.publicId,
+        'video',
+        'authenticated',
+      );
       throw error;
     }
   }
@@ -122,18 +126,40 @@ export class LessonService {
           lesson.videoPublicId ??
           this.cloudinaryService.getPublicIdFromUrl(lesson.videoUrl, 'video');
 
-        await this.cloudinaryService.deleteAsset(oldVideoPublicId, 'video');
+        await this.cloudinaryService.deleteAsset(
+          oldVideoPublicId,
+          'video',
+          this.cloudinaryService.deliveryTypeOf(lesson.videoUrl),
+        );
       }
 
       return updatedLesson;
     } catch (error) {
-      await this.cloudinaryService.deleteAsset(video?.publicId, 'video');
+      await this.cloudinaryService.deleteAsset(
+        video?.publicId,
+        'video',
+        'authenticated',
+      );
       throw error;
     }
   }
 
   async removeLesson(instructorId: string, lessonId: number) {
     const lesson = await this.findOwnedLesson(instructorId, lessonId);
+
+    // คอร์สที่ขายอยู่ต้องมีบทเรียนเสมอ (กติกาเดียวกับตอนกดเผยแพร่)
+    // ลบบทสุดท้ายได้เฉพาะตอนเป็น Draft ผู้สอนจะได้รู้ตัวว่าคอร์สเลิกขายแล้ว
+    if (lesson.course.status === StatusCourse.PUBLISHED) {
+      const lessonCount = await this.prisma.lesson.count({
+        where: { courseId: lesson.courseId },
+      });
+
+      if (lessonCount <= 1) {
+        throw new BadRequestException(
+          'A published course needs at least one lesson. Move the course back to draft before deleting its last lesson.',
+        );
+      }
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.lesson.delete({
@@ -181,7 +207,11 @@ export class LessonService {
       lesson.videoPublicId ??
       this.cloudinaryService.getPublicIdFromUrl(lesson.videoUrl, 'video');
 
-    await this.cloudinaryService.deleteAsset(videoPublicId, 'video');
+    await this.cloudinaryService.deleteAsset(
+      videoPublicId,
+      'video',
+      this.cloudinaryService.deliveryTypeOf(lesson.videoUrl),
+    );
 
     return {
       message: 'Lesson deleted successfully',

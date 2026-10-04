@@ -36,7 +36,7 @@ export default async function PaymentFailedPage({
               </div>
               <p className="text-sm text-muted-foreground">
                 {message ??
-                  "Your card was declined. This can happen due to insufficient funds, incorrect card details, or bank restrictions."}
+                  "The payment wasn't completed — it may have been declined, cancelled, or the QR code expired. Please try again or choose another payment method."}
               </p>
             </div>
           </div>

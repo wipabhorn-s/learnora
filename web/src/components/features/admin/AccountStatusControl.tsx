@@ -1,14 +1,7 @@
 "use client";
 
+import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   updateAdminStatusAction,
   updateUserStatusAction,
@@ -45,57 +38,31 @@ export default function AccountStatusControl({
   };
 
   return (
-    <Dialog
+    <ConfirmDialog
       open={open}
-      onOpenChange={(nextOpen) => {
-        if (!isPending) setOpen(nextOpen);
-      }}
-    >
-      <Button
-        type="button"
-        variant={active ? "destructive" : "outline"}
-        size="sm"
-        className="w-24 font-semibold"
-        onClick={() => setOpen(true)}
-        disabled={isPending}
-      >
-        {active ? "Suspend" : "Reactivate"}
-      </Button>
-
-      <DialogContent showCloseButton={!isPending}>
-        <DialogHeader>
-          <DialogTitle>
-            {active ? "Suspend this account?" : "Reactivate this account?"}
-          </DialogTitle>
-          <DialogDescription>
-            {active
-              ? `${accountName} will not be able to sign in until the account is reactivated.`
-              : `${accountName} will be able to sign in and use the platform again.`}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setOpen(false)}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant={active ? "destructive" : "default"}
-            onClick={confirmChange}
-            disabled={isPending}
-          >
-            {isPending
-              ? "Saving..."
-              : active
-                ? "Suspend Account"
-                : "Reactivate Account"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      onOpenChange={setOpen}
+      pending={isPending}
+      trigger={
+        <Button
+          type="button"
+          variant={active ? "destructive" : "outline"}
+          size="sm"
+          className="w-24 font-semibold"
+          onClick={() => setOpen(true)}
+          disabled={isPending}
+        >
+          {active ? "Suspend" : "Reactivate"}
+        </Button>
+      }
+      title={active ? "Suspend this account?" : "Reactivate this account?"}
+      description={
+        active
+          ? `${accountName} will not be able to sign in until the account is reactivated.`
+          : `${accountName} will be able to sign in and use the platform again.`
+      }
+      confirmLabel={active ? "Suspend Account" : "Reactivate Account"}
+      destructive={active}
+      onConfirm={confirmChange}
+    />
   );
 }

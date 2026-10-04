@@ -3,18 +3,26 @@
 import { AccessTokenService } from '@/auth/access-token.service';
 import { EmailVerificationTokenService } from '@/auth/email-verification-token.service';
 import { GoogleAuthService, GoogleProfile } from '@/auth/google-auth.service';
-import { Role } from '@/database/generated/prisma/enums';
+import { OneTimeCodeService } from '@/auth/one-time-code.service';
+import {
+  OtpPurpose,
+  Role,
+  StatusCourse,
+} from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
 import { BcryptService } from '@/infrastructure/hash/bcrypt.service';
 import { MailService } from '@/infrastructure/mail/mail.service';
 import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
 import { ChangeEmailDto } from '@/user/dto/change-email.dto';
 import { ChangePasswordDto } from '@/user/dto/change-password.dto';
+import { DeleteAccountDto } from '@/user/dto/delete-account.dto';
+import { OTP_RESEND_COOLDOWN_SECONDS } from '@/auth/one-time-code.service';
 import { UpdateProfileDto } from '@/user/dto/update-profile.dto';
 import { UserCreateInput } from '@/user/types/user.type';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -31,6 +39,7 @@ export class UserService {
     private readonly emailVerificationTokenService: EmailVerificationTokenService,
     private readonly mailService: MailService,
     private readonly accessTokenService: AccessTokenService,
+    private readonly oneTimeCodeService: OneTimeCodeService,
   ) {}
 
   async createUser(input: UserCreateInput) {
@@ -116,7 +125,10 @@ export class UserService {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: dto,
+      data: {
+        ...dto,
+        ...(dto.bio !== undefined && { bio: dto.bio || null }),
+      },
       omit: { password: true, avatarPublicId: true },
     });
   }
@@ -192,6 +204,7 @@ export class UserService {
         password: true,
         googleId: true,
         isInstructor: true,
+        twoFactorEnabled: true,
         emailVerificationTokens: {
           where: { usedAt: null, expiresAt: { gt: new Date() } },
           select: { pendingEmail: true },
@@ -211,8 +224,267 @@ export class UserService {
       hasPassword: user.password !== null,
       googleConnected: user.googleId !== null,
       isInstructor: user.isInstructor,
+      twoFactorEnabled: user.twoFactorEnabled,
       pendingEmail: user.emailVerificationTokens[0]?.pendingEmail ?? null,
     };
+  }
+
+  // --- การยืนยันตัวตน 2 ขั้นตอน (รหัสทางอีเมล) ---
+
+  /**
+   * ขั้นแรกของการเปิด 2FA: ส่งรหัสไปที่อีเมลก่อน ใส่ถูกถึงจะเปิดได้
+   * พิสูจน์ว่ายังเข้ากล่องเมลนั้นได้จริง ไม่งั้นเปิดแล้วอาจล็อกตัวเองออก
+   * ต้องมีรหัสผ่านก่อน เพราะ 2FA ใช้กับการล็อกอินด้วยรหัสผ่านเท่านั้น
+   */
+  async requestEnableTwoFactor(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, password: true, twoFactorEnabled: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.twoFactorEnabled) {
+      throw new BadRequestException('Two-step verification is already on');
+    }
+
+    if (!user.password) {
+      throw new BadRequestException(
+        'Set a password first. Two-step verification protects password logins.',
+      );
+    }
+
+    const { id, code } = await this.oneTimeCodeService.issue(
+      userId,
+      OtpPurpose.ENABLE_TWO_FACTOR,
+    );
+    await this.mailService.sendOneTimeCode(
+      user.email,
+      code,
+      OtpPurpose.ENABLE_TWO_FACTOR,
+    );
+
+    return {
+      challengeId: id,
+      message: `We sent a 6-digit code to ${user.email}`,
+    };
+  }
+
+  async confirmEnableTwoFactor(
+    userId: string,
+    challengeId: string,
+    code: string,
+  ) {
+    const codeOwnerId = await this.oneTimeCodeService.verify(
+      challengeId,
+      code,
+      OtpPurpose.ENABLE_TWO_FACTOR,
+    );
+
+    // challengeId ของคนอื่นใช้แทนกันไม่ได้
+    if (codeOwnerId !== userId) {
+      throw new BadRequestException({
+        message: 'This code has expired. Request a new one.',
+        code: 'OTP_EXPIRED',
+      });
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: true },
+    });
+
+    return { message: 'Two-step verification is now on' };
+  }
+
+  /** ข้อมูลที่ต้องใช้ตรวจก่อนลบบัญชี ทั้งตอนขอรหัสและตอนลบจริง */
+  private async findDeletableUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true,
+        password: true,
+        role: true,
+        avatarPublicId: true,
+        avatarUrl: true,
+        deletedAt: true,
+      },
+    });
+    if (!user || user.deletedAt) throw new NotFoundException('User not found');
+
+    // แอดมินลบตัวเองไม่ได้ กันระบบไม่มีคนดูแล ต้องให้ Super Admin จัดการ
+    if (user.role !== Role.STUDENT) {
+      throw new ForbiddenException(
+        'Admin accounts can only be removed by a super admin',
+      );
+    }
+
+    // ผู้สอนที่ยังมีคอร์สอยู่: ผู้เรียนที่ซื้อแล้วต้องเรียนต่อได้ ลบเองไม่ได้
+    const activeCourses = await this.prisma.course.count({
+      where: { instructorId: userId, status: { not: StatusCourse.DELETED } },
+    });
+    if (activeCourses > 0) {
+      throw new ConflictException({
+        message:
+          'You still have courses. Delete or unpublish them first, or contact support to close an instructor account.',
+        code: 'HAS_COURSES',
+      });
+    }
+
+    return user;
+  }
+
+  /**
+   * บัญชีที่ไม่มีรหัสผ่าน (เข้าทาง Google): ขอรหัส 6 หลักทางอีเมลก่อนลบ
+   * ต้องพิมพ์อีเมลของบัญชีให้ตรงก่อน กันกดผิด และพิสูจน์ว่ายังเข้ากล่องเมลได้จริง
+   */
+  async requestDeleteAccountCode(userId: string, email: string) {
+    const user = await this.findDeletableUser(userId);
+
+    if (user.password) {
+      throw new BadRequestException('Confirm with your password instead');
+    }
+    if (email.trim().toLowerCase() !== user.email.toLowerCase()) {
+      throw new BadRequestException(
+        "That isn't the email address on your account",
+      );
+    }
+
+    // กันกดส่งรหัสถี่ ๆ (สแปมกล่องเมล) เหมือนการส่งรหัสตอนล็อกอิน
+    const pending = await this.prisma.oneTimeCode.findFirst({
+      where: { userId, purpose: OtpPurpose.DELETE_ACCOUNT, usedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    if (pending && this.oneTimeCodeService.isCoolingDown(pending.createdAt)) {
+      throw new BadRequestException({
+        message: `Please wait ${OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code`,
+        code: 'OTP_COOLDOWN',
+      });
+    }
+
+    const { id, code } = await this.oneTimeCodeService.issue(
+      userId,
+      OtpPurpose.DELETE_ACCOUNT,
+    );
+    await this.mailService.sendOneTimeCode(
+      user.email,
+      code,
+      OtpPurpose.DELETE_ACCOUNT,
+    );
+
+    return {
+      challengeId: id,
+      message: `We sent a 6-digit code to ${user.email}`,
+    };
+  }
+
+  /**
+   * ผู้ใช้ลบบัญชีตัวเอง (สิทธิ์ตาม PDPA)
+   * ยืนยันด้วยรหัสผ่าน หรือรหัสทางอีเมลสำหรับบัญชีที่ไม่มีรหัสผ่าน
+   *
+   * ไม่ลบแถวทิ้ง เพราะประวัติการซื้อต้องเก็บตามกฎหมายบัญชี และคำสั่งซื้อผูกกับผู้ใช้อยู่
+   * จึงลบ/แทนที่ข้อมูลที่ระบุตัวตนได้ทั้งหมด ลบตะกร้า wishlist ความคืบหน้าการเรียน
+   * และตั้ง status = false ให้ token ที่ค้างอยู่ใช้ไม่ได้ทันที (AuthGuard เช็กทุกคำขอ)
+   * อีเมลเดิมถูกแทนที่ จึงสมัครใหม่ด้วยอีเมลเดิมได้
+   */
+  async deleteAccount(userId: string, dto: DeleteAccountDto) {
+    const user = await this.findDeletableUser(userId);
+
+    if (user.password) {
+      if (
+        !dto.password ||
+        !(await this.bcryptService.compare(dto.password, user.password))
+      ) {
+        throw new UnauthorizedException('Password is incorrect');
+      }
+    } else {
+      if (!dto.challengeId || !dto.code) {
+        throw new BadRequestException(
+          'Enter the 6-digit code we sent to your email',
+        );
+      }
+      const codeOwnerId = await this.oneTimeCodeService.verify(
+        dto.challengeId,
+        dto.code,
+        OtpPurpose.DELETE_ACCOUNT,
+      );
+      // challengeId ของคนอื่นใช้แทนกันไม่ได้
+      if (codeOwnerId !== userId) {
+        throw new BadRequestException({
+          message: 'This code has expired. Request a new one.',
+          code: 'OTP_EXPIRED',
+        });
+      }
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.cartItem.deleteMany({ where: { studentId: userId } }),
+      this.prisma.wishlist.deleteMany({ where: { studentId: userId } }),
+      this.prisma.lessonProgress.deleteMany({
+        where: { purchaseItem: { studentId: userId } },
+      }),
+      this.prisma.emailVerificationToken.deleteMany({ where: { userId } }),
+      this.prisma.passwordResetToken.deleteMany({ where: { userId } }),
+      this.prisma.oneTimeCode.deleteMany({ where: { userId } }),
+      // เลขบัญชีธนาคารสำหรับรับเงิน (ผู้สอน) เป็นข้อมูลส่วนตัว ลบทิ้งด้วย
+      this.prisma.payoutAccount.deleteMany({ where: { instructorId: userId } }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          firstName: 'Deleted',
+          lastName: 'User',
+          // โดเมน .invalid ส่งเมลไม่ได้แน่นอน (RFC 2606) และไม่ชนกับใคร
+          email: `deleted-${userId}@deleted.invalid`,
+          password: null,
+          googleId: null,
+          avatarUrl: null,
+          avatarPublicId: null,
+          bio: null,
+          emailVerifiedAt: null,
+          twoFactorEnabled: false,
+          isInstructor: false,
+          status: false,
+          deletedAt: new Date(),
+        },
+      }),
+    ]);
+
+    // ลบรูปหลังบันทึกสำเร็จ ลบไม่ได้ก็ไม่เป็นไร (deleteAsset กลืน error เอง)
+    await this.cloudinaryService.deleteAsset(
+      user.avatarPublicId ??
+        this.cloudinaryService.getPublicIdFromUrl(user.avatarUrl),
+    );
+
+    return { message: 'Your account has been deleted' };
+  }
+
+  /** ปิดต้องใส่รหัสผ่าน กันคนที่ยืมเครื่องที่ล็อกอินค้างไว้แอบปิด */
+  async disableTwoFactor(userId: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { password: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (
+      !user.password ||
+      !(await this.bcryptService.compare(password, user.password))
+    ) {
+      throw new UnauthorizedException('Password is incorrect');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: false },
+    });
+
+    return { message: 'Two-step verification is now off' };
   }
 
   /**

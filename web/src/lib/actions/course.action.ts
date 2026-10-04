@@ -5,8 +5,8 @@ import { ApiError } from "@/lib/api/api-error";
 import { CourseApi } from "@/lib/api/course.api";
 import { auth } from "@/lib/auth";
 import { createCourseSchema } from "@/lib/schemas/course.schema";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import z from "zod";
 
 export async function createCourseAction(
@@ -20,9 +20,23 @@ export async function createCourseAction(
 
   const accessDuration = formData.get("accessDuration");
 
+  // รายการมาเป็น JSON string (multipart ส่ง array ไม่ได้) แปลงกลับก่อนตรวจ
+  const parseList = (key: string): unknown => {
+    const value = formData.get(key);
+    if (typeof value !== "string" || value === "") return [];
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value; // ให้ schema ฟ้องว่าไม่ใช่ array
+    }
+  };
+
   const parsed = createCourseSchema.safeParse({
     title: formData.get("title"),
+    subtitle: formData.get("subtitle") ?? "",
     description: formData.get("description"),
+    learningOutcomes: parseList("learningOutcomes"),
+    requirements: parseList("requirements"),
     price: Number(formData.get("price") ?? NaN),
     category: formData.get("category"),
     level: formData.get("level"),
@@ -31,19 +45,17 @@ export async function createCourseAction(
   });
 
   if (!parsed.success) {
+    // บอกข้อแรกที่ผิดไปเลย ผู้ใช้จะได้รู้ว่าต้องแก้ช่องไหน
     return {
       success: false,
-      message: "Validation failed",
+      message: parsed.error.issues[0]?.message ?? "Validation failed",
       errors: z.flattenError(parsed.error),
       code: "VALIDATION_ERROR",
     };
   }
 
   try {
-    const course = await CourseApi.create(
-      formData,
-      session.user.access_token,
-    );
+    const course = await CourseApi.create(formData, session.user.access_token);
 
     return { success: true, courseId: course.id };
   } catch (error) {
@@ -59,10 +71,9 @@ export async function createCourseAction(
   }
 }
 
-export async function removeCourseAction(courseId: number): Promise<
-  | { success: true }
-  | { success: false; message: string }
-> {
+export async function removeCourseAction(
+  courseId: number,
+): Promise<{ success: true } | { success: false; message: string }> {
   const session = await auth();
 
   if (!session) {
@@ -128,11 +139,7 @@ export async function updateCourseStatusAction(
   }
 
   try {
-    await CourseApi.updateStatus(
-      courseId,
-      status,
-      session.user.access_token,
-    );
+    await CourseApi.updateStatus(courseId, status, session.user.access_token);
     revalidatePath("/instructor/courses");
     return { success: true };
   } catch (error) {

@@ -1,15 +1,14 @@
 // api\src\auth\dto\register.dto.ts
 
+import { StrongPassword } from '@/common/decorator/strong-password.decorator';
 import { Trim } from '@/common/decorator/trim.decorator';
 import { Type } from 'class-transformer';
 import {
-  IsAlphanumeric,
   IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
-  MinLength,
 } from 'class-validator';
 
 export class RegisterDto {
@@ -29,10 +28,7 @@ export class RegisterDto {
   @Trim()
   email: string;
 
-  @IsString()
-  @MinLength(8)
-  @IsNotEmpty()
-  @IsAlphanumeric()
+  @StrongPassword()
   password: string;
 
   /**

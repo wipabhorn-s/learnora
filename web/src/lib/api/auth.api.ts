@@ -1,5 +1,9 @@
 import { apiFetch } from "@/lib/api/api-fetch";
-import { LoginResponse } from "@/lib/api/api.type";
+import {
+  LoginCodeRequired,
+  LoginResponse,
+  UserResponse,
+} from "@/lib/api/api.type";
 import {
   ForgotPasswordInput,
   LoginInput,
@@ -16,10 +20,24 @@ export const AuthApi = {
   },
 
   login(data: LoginInput) {
-    return apiFetch<LoginResponse>("/auth/login", {
+    return apiFetch<LoginResponse | LoginCodeRequired>("/auth/login", {
       method: "POST",
       body: data,
     });
+  },
+
+  verifyLoginCode(challengeId: string, code: string) {
+    return apiFetch<LoginResponse>("/auth/login/code", {
+      method: "POST",
+      body: { challengeId, code },
+    });
+  },
+
+  resendLoginCode(challengeId: string) {
+    return apiFetch<{ challengeId: string; message: string }>(
+      "/auth/login/code/resend",
+      { method: "POST", body: { challengeId } },
+    );
   },
 
   loginWithGoogle(idToken: string, asInstructor = false) {
@@ -55,5 +73,10 @@ export const AuthApi = {
       method: "POST",
       body: data,
     });
+  },
+
+  /** ข้อมูลล่าสุดจากฐานข้อมูล สำหรับฟิลด์ที่ไม่ได้เก็บใน session (เช่น bio) */
+  getProfile(token: string) {
+    return apiFetch<UserResponse>("/auth/profile", { token });
   },
 };

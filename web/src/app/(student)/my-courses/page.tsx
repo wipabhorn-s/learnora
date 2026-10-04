@@ -1,10 +1,14 @@
 import CourseThumbnail from "@/components/shared/CourseThumbnail";
+import EmptyState, { BROWSE_COURSES } from "@/components/shared/EmptyState";
+import { Page, PageHeader } from "@/components/shared/Page";
 import Pagination from "@/components/shared/Pagination";
+import ToastFromUrl from "@/components/shared/ToastFromUrl";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { renewAccessAction } from "@/lib/actions/cart.actions";
 import { EnrolledCourse, LearningApi } from "@/lib/api/learning.api";
 import { auth } from "@/lib/auth";
+import { fullName } from "@/lib/format";
 import { BookOpen } from "lucide-react";
 import { Metadata } from "next";
 import Link from "next/link";
@@ -52,7 +56,7 @@ function CourseRow({
             {item.course.title}
           </h3>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            {item.course.instructor.firstName} {item.course.instructor.lastName}
+            {fullName(item.course.instructor)}
           </p>
           <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
             <BookOpen size={15} />
@@ -115,14 +119,12 @@ export default async function MyCoursesPage({
   searchParams: Promise<{
     activePage?: string;
     expiredPage?: string;
-    cartError?: string;
     view?: string;
   }>;
 }) {
   const params = await searchParams;
   const activePage = Math.max(1, Number(params.activePage) || 1);
   const expiredPage = Math.max(1, Number(params.expiredPage) || 1);
-  const { cartError } = params;
   const session = await auth();
   const { active, expired } = await LearningApi.findEnrolledCourses(
     session!.user.access_token,
@@ -133,30 +135,17 @@ export default async function MyCoursesPage({
 
   if (active.total === 0 && expired.total === 0) {
     return (
-      <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col sm:min-h-[calc(100dvh-3rem)] xl:min-h-[calc(100dvh-4rem)]">
-        <h1 className="mb-7 text-3xl font-extrabold tracking-tight">
-          My Courses
-        </h1>
-        <Card className="min-h-128 flex-1 items-center justify-center gap-0 px-6 py-16 text-center">
-          <div className="mb-6 flex size-28 items-center justify-center rounded-full bg-secondary">
-            <BookOpen size={60} className="text-primary/70" />
-          </div>
-          <h2 className="mb-3 text-2xl font-extrabold">
-            You haven&apos;t enrolled in any courses yet
-          </h2>
-          <p className="mb-8 text-base text-muted-foreground">
-            Browse our catalog and start learning today.
-          </p>
-          <Link
-            href="/courses"
-            className={buttonVariants({
-              className: "h-12 rounded-xl px-9 text-base font-semibold",
-            })}
-          >
-            Browse Courses
-          </Link>
-        </Card>
-      </div>
+      <Page height="fill">
+        <PageHeader title="My Courses" />
+        <ToastFromUrl params={["cartError"]} />
+        <EmptyState
+          icon={BookOpen}
+          title="You haven't enrolled in any courses yet"
+          description="Browse our catalog and start learning today."
+          action={BROWSE_COURSES}
+          className="min-h-128"
+        />
+      </Page>
     );
   }
 
@@ -174,19 +163,13 @@ export default async function MyCoursesPage({
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col gap-6 sm:min-h-[calc(100dvh-3rem)] xl:h-[calc(100dvh-4rem)] xl:min-h-0 xl:overflow-hidden">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight">My Courses</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Continue learning and keep track of your progress.
-        </p>
-      </div>
+    <Page height="fit">
+      <PageHeader
+        title="My Courses"
+        description="Continue learning and keep track of your progress."
+      />
 
-      {cartError && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {cartError}
-        </div>
-      )}
+      <ToastFromUrl params={["cartError"]} />
 
       <div className="inline-flex h-11 self-start items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
         <Link
@@ -230,33 +213,23 @@ export default async function MyCoursesPage({
       </div>
 
       {view === "active" && active.total === 0 && (
-        <Card className="min-h-96 flex-1 items-center justify-center gap-0 px-6 py-12 text-center">
-          <div className="mb-5 flex size-20 items-center justify-center rounded-full bg-secondary">
-            <BookOpen size={40} className="text-primary/70" />
-          </div>
-          <h2 className="mb-2 text-xl font-extrabold">No active courses</h2>
-          <p className="mb-6 text-sm text-muted-foreground">
-            Courses you can currently access will appear here.
-          </p>
-          <Link href="/courses" className={buttonVariants()}>
-            Browse Courses
-          </Link>
-        </Card>
+        <EmptyState
+          icon={BookOpen}
+          title="No active courses"
+          description="Courses you can currently access will appear here."
+          action={BROWSE_COURSES}
+          className="min-h-96"
+        />
       )}
 
       {view === "expired" && expired.total === 0 && (
-        <Card className="min-h-96 flex-1 items-center justify-center gap-0 px-6 py-12 text-center">
-          <div className="mb-5 flex size-20 items-center justify-center rounded-full bg-secondary">
-            <BookOpen size={40} className="text-primary/70" />
-          </div>
-          <h2 className="mb-2 text-xl font-extrabold">No expired courses</h2>
-          <p className="mb-6 text-sm text-muted-foreground">
-            Courses with expired access will appear here.
-          </p>
-          <Link href="/my-courses" className={buttonVariants()}>
-            View Active Courses
-          </Link>
-        </Card>
+        <EmptyState
+          icon={BookOpen}
+          title="No expired courses"
+          description="Courses with expired access will appear here."
+          action={{ label: "View Active Courses", href: "/my-courses" }}
+          className="min-h-96"
+        />
       )}
 
       {view === "active" && active.total > 0 && (
@@ -300,6 +273,6 @@ export default async function MyCoursesPage({
           </div>
         </div>
       )}
-    </div>
+    </Page>
   );
 }

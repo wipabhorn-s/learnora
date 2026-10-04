@@ -1,39 +1,7 @@
-import Sidebar, { SidebarItem } from "@/components/layout/Sidebar";
+import WorkspaceShell from "@/components/layout/WorkspaceShell";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-const ITEMS: SidebarItem[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: "dashboard",
-  },
-  {
-    label: "My Courses",
-    href: "/my-courses",
-    icon: "courses",
-  },
-  {
-    label: "Wishlist",
-    href: "/wishlist",
-    icon: "wishlist",
-  },
-  {
-    label: "Cart",
-    href: "/cart",
-    icon: "cart",
-  },
-  {
-    label: "Purchase History",
-    href: "/purchase-history",
-    icon: "history",
-  },
-  {
-    label: "Profile",
-    href: "/profile",
-    icon: "profile",
-  },
-];
 export default async function StudentLayout({
   children,
 }: {
@@ -44,16 +12,9 @@ export default async function StudentLayout({
   if (!session) redirect("/login");
   if (session.user.role !== "STUDENT") redirect("/");
 
-  const ITEMS_FOR_USER: SidebarItem[] = session.user.isInstructor
-    ? [...ITEMS, { label: "Teaching", href: "/instructor/dashboard", icon: "create-course" }]
-    : ITEMS;
-
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar items={ITEMS_FOR_USER} />
-      <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 xl:p-8">
-        {children}
-      </main>
-    </div>
+    <WorkspaceShell workspace="learn" canTeach={session.user.isInstructor}>
+      {children}
+    </WorkspaceShell>
   );
 }

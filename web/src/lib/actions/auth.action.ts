@@ -4,6 +4,13 @@ import { ErrorActionResult } from "@/lib/actions/action.type";
 import { ApiError } from "@/lib/api/api-error";
 import { AuthApi } from "@/lib/api/auth.api";
 import { auth, INSTRUCTOR_INTENT_COOKIE, signIn, signOut } from "@/lib/auth";
+import { rememberEmailSent } from "@/lib/email-sent-cookie";
+import {
+  clearLoginChallenge,
+  getLoginChallenge,
+  setLoginChallenge,
+} from "@/lib/login-challenge";
+import { LOGIN_ERRORS, loginErrorMessage } from "@/lib/login-errors";
 import {
   ForgotPasswordInput,
   forgotPasswordSchema,
@@ -44,35 +51,23 @@ export async function registerAction(
     throw error;
   }
 
-  redirect(`/verify-email/sent?email=${encodeURIComponent(parsed.data.email)}`);
+  await rememberEmailSent("verify", parsed.data.email);
+  redirect("/verify-email/sent");
 }
 
-/** ข้อความที่ผู้ใช้เห็นเมื่อล็อกอินไม่ผ่าน แยกตามสาเหตุจริงที่ API ส่งมา */
-const LOGIN_ERRORS: Record<string, string> = {
-  INVALID_CREDENTIALS: "Email or password is invalid",
-  GOOGLE_ONLY_ACCOUNT:
-    "This account was created with Google. Use Continue with Google, or set a password via Forgot password.",
-  ACCOUNT_SUSPENDED:
-    "Your account has been suspended. Please contact support.",
-  EMAIL_NOT_VERIFIED:
-    "Please verify your email first. Check your inbox for the verification link.",
-  SERVICE_UNAVAILABLE:
-    "We could not reach the server. Please try again in a moment.",
-};
-
-export async function loginAction(
-  input: LoginInput,
+/** ทั้งขั้นรหัสผ่านและขั้นรหัส 6 หลักจบเหมือนกัน: ผ่านแล้วไปหน้าแรก */
+async function signInWithCredentials(
+  fields: Record<string, string>,
 ): Promise<ErrorActionResult | void> {
   try {
-    await signIn("credentials", { ...input, redirect: false });
+    await signIn("credentials", { ...fields, redirect: false });
   } catch (error) {
     if (error instanceof CredentialsSignin) {
       const code = error.code ?? "INVALID_CREDENTIALS";
-
       return {
         success: false,
-        message: LOGIN_ERRORS[code] ?? LOGIN_ERRORS.INVALID_CREDENTIALS,
-        code,
+        message: loginErrorMessage(code),
+        code: code.split(":")[0],
       };
     }
     throw error;
@@ -81,12 +76,67 @@ export async function loginAction(
   redirect("/");
 }
 
+export async function loginAction(
+  input: LoginInput,
+): Promise<ErrorActionResult | void> {
+  return signInWithCredentials(input);
+}
+
+export async function verifyLoginCodeAction(
+  code: string,
+): Promise<ErrorActionResult | void> {
+  if (!/^\d{6}$/.test(code)) {
+    return {
+      success: false,
+      message: "Enter the 6-digit code from your email.",
+      code: "OTP_INVALID",
+    };
+  }
+
+  return signInWithCredentials({ code });
+}
+
+export async function resendLoginCodeAction(): Promise<
+  { success: true; message: string } | ErrorActionResult
+> {
+  const challengeId = await getLoginChallenge();
+  if (!challengeId) {
+    return {
+      success: false,
+      message: LOGIN_ERRORS.OTP_SESSION_EXPIRED,
+      code: "OTP_SESSION_EXPIRED",
+    };
+  }
+
+  try {
+    const result = await AuthApi.resendLoginCode(challengeId);
+    await setLoginChallenge(result.challengeId);
+    return { success: true, message: result.message };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return {
+        success: false,
+        message: error.message,
+        code: error.code ?? "API_ERROR",
+      };
+    }
+    throw error;
+  }
+}
+
+/** กด "ใช้บัญชีอื่น / กลับ" ระหว่างรอรหัส ทิ้งคำขอค้างไว้ไม่ให้ใช้ต่อได้ */
+export async function cancelLoginCodeAction(): Promise<void> {
+  await clearLoginChallenge();
+}
+
 /**
  * ปุ่ม Google อยู่คนละฟอร์มกับฟอร์มสมัคร ค่า role ที่กดเลือกไว้จึงไม่เคย
  * เดินทางไปถึง API เลย — ฝากไว้ในคุกกี้อายุสั้นก่อนออกไป Google แล้วให้
  * jwt callback หยิบไปส่งต่อตอนขากลับ
  */
-export async function loginWithGoogleAction(formData?: FormData): Promise<void> {
+export async function loginWithGoogleAction(
+  formData?: FormData,
+): Promise<void> {
   const asInstructor = formData?.get("asInstructor") === "true";
   const cookieStore = await cookies();
 
@@ -144,6 +194,7 @@ export async function resendVerificationAction(
   }
 
   const { message } = await AuthApi.resendVerification(parsed.data.email);
+  await rememberEmailSent("verify", parsed.data.email);
   return { success: true, message };
 }
 
@@ -166,7 +217,26 @@ export async function forgotPasswordAction(
 
   await AuthApi.forgotPassword(parsed.data);
 
+  await rememberEmailSent("reset", parsed.data.email);
   redirect("/forgot-password/confirm");
+}
+
+export async function resendPasswordResetAction(
+  email: string,
+): Promise<{ success: true; message: string } | ErrorActionResult> {
+  const parsed = forgotPasswordSchema.safeParse({ email });
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: "Invalid email address",
+      code: "VALIDATION_ERROR",
+    };
+  }
+
+  const { message } = await AuthApi.forgotPassword(parsed.data);
+  await rememberEmailSent("reset", parsed.data.email);
+  return { success: true, message };
 }
 
 export async function resetPasswordAction(

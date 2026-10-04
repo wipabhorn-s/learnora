@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -8,25 +8,22 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { resetPasswordAction } from "@/lib/actions/auth.action";
 import {
   ResetPasswordInput,
   resetPasswordSchema,
 } from "@/lib/schemas/auth.schema";
+import { toast } from "@/lib/toast";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle } from "lucide-react";
 import { useTransition } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 export default function ResetPasswordForm({ token }: { token: string }) {
-  const {
-    control,
-    handleSubmit,
-    setError,
-    formState: { errors },
-  } = useForm<ResetPasswordInput>({
+  const { control, handleSubmit, clearErrors } = useForm<ResetPasswordInput>({
     resolver: zodResolver(resetPasswordSchema),
+    // ตรวจซ้ำตอนกดส่งเท่านั้น ระหว่างพิมพ์แก้ให้กรอบแดงหายไปก่อน
+    reValidateMode: "onSubmit",
     defaultValues: { token, newPassword: "" },
   });
 
@@ -35,44 +32,38 @@ export default function ResetPasswordForm({ token }: { token: string }) {
   const onSubmit = (data: ResetPasswordInput) => {
     startTransition(async () => {
       const result = await resetPasswordAction(data);
-      if (result) setError("root", { message: result.message });
+      if (result) toast.error(result.message);
     });
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form method="post" onSubmit={handleSubmit(onSubmit)}>
       <FieldGroup className="gap-4">
-        {errors.root && (
-          <Alert
-            variant="destructive"
-            className="border-destructive bg-destructive/15"
-          >
-            <AlertCircle />
-            <AlertTitle>{errors.root.message}</AlertTitle>
-          </Alert>
-        )}
-
         <Controller
           control={control}
           name="newPassword"
           render={({ field, fieldState }) => (
             <Field className="gap-1" data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor={field.name}>New password</FieldLabel>
-              <Input
-                placeholder="At least 8 characters"
-                type="password"
+              <PasswordInput
+                placeholder="Create a strong password"
                 id={field.name}
                 {...field}
+                onChange={(event) => {
+                  field.onChange(event);
+                  clearErrors(field.name);
+                }}
                 aria-invalid={fieldState.invalid}
               />
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+              <PasswordChecklist value={field.value} />
             </Field>
           )}
         />
 
         <Field className="gap-1">
-          <Button type="submit" disabled={isPending} className="py-5">
-            {isPending ? "Resetting ..." : "Reset password"}
+          <Button type="submit" disabled={isPending} size="lg">
+            {isPending ? "Resetting..." : "Reset password"}
           </Button>
         </Field>
       </FieldGroup>

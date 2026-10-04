@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    // ไฟล์ที่ Prisma สร้างให้ ไม่ต้อง lint (สร้างใหม่ทุกครั้งที่ prisma generate)
+    ignores: ['eslint.config.mjs', 'src/database/generated/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

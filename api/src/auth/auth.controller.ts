@@ -5,7 +5,9 @@ import { ForgotPasswordDto } from '@/auth/dto/forgot-password.dto';
 import { GoogleLoginDto } from '@/auth/dto/google-login.dto';
 import { LoginDto } from '@/auth/dto/login.dto';
 import { RegisterDto } from '@/auth/dto/register.dto';
+import { ResendLoginCodeDto } from '@/auth/dto/resend-login-code.dto';
 import { ResendVerificationDto } from '@/auth/dto/resend-verification.dto';
+import { VerifyLoginCodeDto } from '@/auth/dto/verify-login-code.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
 import { VerifyEmailDto } from '@/auth/dto/verify-email.dto';
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
@@ -36,6 +38,19 @@ export class AuthController {
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  /** ขั้นที่ 2 ของการล็อกอินเมื่อเปิด 2FA: รหัส 6 หลักจากอีเมล */
+  @HttpCode(HttpStatus.OK)
+  @Post('login/code')
+  verifyLoginCode(@Body() verifyLoginCodeDto: VerifyLoginCodeDto) {
+    return this.authService.verifyLoginCode(verifyLoginCodeDto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('login/code/resend')
+  resendLoginCode(@Body() resendLoginCodeDto: ResendLoginCodeDto) {
+    return this.authService.resendLoginCode(resendLoginCodeDto);
   }
 
   @HttpCode(HttpStatus.OK)

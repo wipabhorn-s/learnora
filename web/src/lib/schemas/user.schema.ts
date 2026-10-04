@@ -1,28 +1,28 @@
+import { passwordSchema } from "@/lib/schemas/password.schema";
 import z from "zod";
 
 export const updateProfileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
+  /** ไม่ส่ง = ไม่แก้ (ช่องนี้แสดงเฉพาะผู้สอน) */
+  bio: z.string().max(1000, "Bio must be 1,000 characters or fewer").optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 const changePasswordFieldsSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z
-    .string()
-    .regex(
-      /^[0-9a-zA-Z]{8,}$/,
-      "Password must be at least 8 characters and contain only letters and numbers",
-    ),
+  newPassword: passwordSchema,
   confirmPassword: z.string().min(1, "Please confirm your password"),
 });
 
-export const changePasswordSchema = changePasswordFieldsSchema
-  .refine((data) => data.newPassword === data.confirmPassword, {
+export const changePasswordSchema = changePasswordFieldsSchema.refine(
+  (data) => data.newPassword === data.confirmPassword,
+  {
     message: "Passwords do not match",
     path: ["confirmPassword"],
-  });
+  },
+);
 
 export const changePasswordInputSchema = changePasswordFieldsSchema.omit({
   confirmPassword: true,
@@ -31,16 +31,9 @@ export const changePasswordInputSchema = changePasswordFieldsSchema.omit({
 export type ChangePasswordFormInput = z.infer<typeof changePasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInputSchema>;
 
-const passwordField = z
-  .string()
-  .regex(
-    /^[0-9a-zA-Z]{8,}$/,
-    "Password must be at least 8 characters and contain only letters and numbers",
-  );
-
 export const setPasswordSchema = z
   .object({
-    newPassword: passwordField,
+    newPassword: passwordSchema,
     confirmPassword: z.string().min(1, "Please confirm your password"),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {

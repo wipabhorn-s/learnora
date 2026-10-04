@@ -29,7 +29,7 @@ export default function CoursesSearchInput() {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
-        placeholder="Search courses, instructors..."
+        placeholder="Search courses or instructors..."
         className="flex-1 px-4 py-3 text-sm text-foreground outline-none"
       />
       <button onClick={submit} className="bg-primary px-5 text-white">

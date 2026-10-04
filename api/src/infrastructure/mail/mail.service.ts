@@ -1,7 +1,7 @@
 // api\src\infrastructure\mail\mail.service.ts
 
 import { EnvVariable } from '@/config/env.validation';
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /** Brevo transactional email API — HTTPS ล้วน ไม่ใช่ SMTP */
@@ -9,14 +9,22 @@ const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
 
 const SEND_TIMEOUT_MS = 10_000;
 
+/** ข้อความที่ผู้ใช้/แอดมินพิมพ์เอง ต้อง escape ก่อนใส่ใน HTML ของอีเมล */
+const escapeHtml = (text: string) =>
+  text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
 /**
  * ใช้ HTTP API ของ Brevo แทน SMTP เพราะผู้ให้บริการโฮสต์ส่วนใหญ่ (Railway,
  * Render, Vercel) ปิด outbound SMTP port 25/465/587 ไว้ nodemailer จึงต่อ
  * smtp.gmail.com ไม่ติดบน production แล้วเมลไม่เคยถูกส่งออกเลยโดยไม่มี error
  *
- * BREVO_API_KEY เป็น optional: คนที่ไม่ได้ทำงานกับเมลไม่ต้องหา key มาใส่ก็
- * boot ขึ้น แต่ถ้ามีการส่งจริงโดยไม่ได้ตั้งค่าจะได้ 503 พร้อมบอกว่าขาด env
- * ตัวไหน แทนที่จะล้มตอน boot หรือเงียบหายไปเฉย ๆ
+ * ค่า BREVO_API_KEY / MAIL_FROM / MAIL_FROM_NAME ถูกบังคับให้มีค่าตั้งแต่
+ * ตอน boot แล้วใน env.validation.ts ที่นี่จึงใช้ได้เลยโดยไม่ต้องเช็กซ้ำ
  */
 @Injectable()
 export class MailService {
@@ -37,16 +45,12 @@ export class MailService {
    */
   private get sender(): { email: string; name: string } {
     const raw = this.configService.get('MAIL_FROM', { infer: true }).trim();
-    const configuredName = this.configService.get('MAIL_FROM_NAME', {
-      infer: true,
-    });
-
     const angled = /^(.*)<\s*([^>]+)\s*>$/.exec(raw);
-    const email = angled ? angled[2].trim() : raw;
-    const name =
-      configuredName ?? angled?.[1].trim().replace(/^"|"$/g, '') ?? 'Learnora';
 
-    return { email, name: name || 'Learnora' };
+    return {
+      email: angled ? angled[2].trim() : raw,
+      name: this.configService.get('MAIL_FROM_NAME', { infer: true }),
+    };
   }
 
   private link(path: string, token: string): string {
@@ -70,17 +74,10 @@ export class MailService {
   }
 
   private async send(to: string, subject: string, html: string): Promise<void> {
-    const apiKey = this.configService.get('BREVO_API_KEY', { infer: true });
-    if (!apiKey) {
-      throw new ServiceUnavailableException(
-        'ยังไม่ได้ตั้งค่า BREVO_API_KEY จึงส่งอีเมลไม่ได้',
-      );
-    }
-
     const response = await fetch(BREVO_ENDPOINT, {
       method: 'POST',
       headers: {
-        'api-key': apiKey,
+        'api-key': this.configService.get('BREVO_API_KEY', { infer: true }),
         'content-type': 'application/json',
         accept: 'application/json',
       },
@@ -133,6 +130,51 @@ export class MailService {
     );
   }
 
+  /** รหัส 6 หลัก: ล็อกอิน (2FA), เปิดใช้ 2FA และยืนยันการลบบัญชี */
+  async sendOneTimeCode(
+    to: string,
+    code: string,
+    purpose: 'LOGIN' | 'ENABLE_TWO_FACTOR' | 'DELETE_ACCOUNT',
+  ) {
+    if (purpose === 'DELETE_ACCOUNT') {
+      await this.send(
+        to,
+        `${code} คือรหัสยืนยันการลบบัญชี — Learnora`,
+        this.layout(
+          'รหัสยืนยันการลบบัญชี',
+          `<p style="margin:0 0 16px">มีคำขอลบบัญชี Learnora ของคุณ ใส่รหัสนี้ในหน้า Login &amp; Security เพื่อยืนยัน การลบบัญชีย้อนกลับไม่ได้</p>
+  <p style="margin:0 0 16px;font-size:32px;font-weight:700;letter-spacing:8px;color:#dc2626">${code}</p>
+  <p style="font-size:13px;color:#64748b;margin:0">รหัสนี้ใช้ได้ครั้งเดียวและหมดอายุใน 10 นาที หากคุณไม่ได้เป็นผู้ขอ อย่าบอกรหัสนี้กับใคร และบัญชีของคุณจะยังอยู่ตามปกติ</p>`,
+        ),
+      );
+      return;
+    }
+
+    const isLogin = purpose === 'LOGIN';
+    const heading = isLogin
+      ? 'รหัสยืนยันการเข้าสู่ระบบ'
+      : 'รหัสยืนยันการเปิดใช้งาน 2 ขั้นตอน';
+
+    await this.send(
+      to,
+      `${code} คือรหัสยืนยันของคุณ — Learnora`,
+      this.layout(
+        heading,
+        `<p style="margin:0 0 16px">${
+          isLogin
+            ? 'มีการเข้าสู่ระบบบัญชี Learnora ของคุณด้วยรหัสผ่าน ใส่รหัสนี้เพื่อยืนยันว่าเป็นคุณ'
+            : 'ใส่รหัสนี้ในหน้า Login &amp; Security เพื่อเปิดใช้การยืนยันตัวตน 2 ขั้นตอน'
+        }</p>
+  <p style="margin:0 0 16px;font-size:32px;font-weight:700;letter-spacing:8px;color:#4f46e5">${code}</p>
+  <p style="font-size:13px;color:#64748b;margin:0">รหัสนี้ใช้ได้ครั้งเดียวและหมดอายุใน 10 นาที อย่าบอกรหัสนี้กับใคร${
+    isLogin
+      ? ' หากคุณไม่ได้เป็นคนเข้าสู่ระบบ แปลว่ามีคนรู้รหัสผ่านของคุณ ควรเปลี่ยนรหัสผ่านทันที'
+      : ''
+  }</p>`,
+      ),
+    );
+  }
+
   async sendPasswordResetEmail(to: string, token: string) {
     const url = this.link('/reset-password', token);
 
@@ -144,6 +186,73 @@ export class MailService {
         `<p style="margin:0 0 16px">มีคำขอตั้งรหัสผ่านใหม่สำหรับบัญชีนี้ กดปุ่มด้านล่างเพื่อตั้งรหัสผ่านใหม่</p>
   ${this.button(url, 'ตั้งรหัสผ่านใหม่')}
   <p style="font-size:13px;color:#64748b;margin:0">ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุในไม่ช้า หากคุณไม่ได้เป็นผู้ขอ กรุณาเพิกเฉยต่ออีเมลฉบับนี้</p>`,
+      ),
+    );
+  }
+
+  /** แจ้งผลคำขอคืนเงินให้นักเรียน */
+  async sendRefundDecision(
+    to: string,
+    decision: {
+      approved: boolean;
+      amount: string;
+      courseTitles: string[];
+      /** คืนเงินเองนอกระบบ (เช่นพร้อมเพย์) แอดมินโอนให้แล้ว */
+      manual?: boolean;
+      note?: string | null;
+    },
+  ) {
+    const courses = decision.courseTitles
+      .map((title) => `<li>${escapeHtml(title)}</li>`)
+      .join('');
+    const note = decision.note
+      ? `<p style="margin:0 0 16px;padding:12px;background:#f1f5f9;border-radius:8px">${escapeHtml(decision.note)}</p>`
+      : '';
+    const url = `${this.frontendUrl}/purchase-history`;
+
+    const body = decision.approved
+      ? `<p style="margin:0 0 16px">คำขอคืนเงิน <b>${escapeHtml(decision.amount)}</b> ของคุณได้รับการอนุมัติแล้ว สิทธิ์เข้าเรียนคอร์สต่อไปนี้ถูกยกเลิก</p>
+  <ul style="margin:0 0 16px;padding-left:20px">${courses}</ul>
+  <p style="margin:0 0 16px">${
+    decision.manual
+      ? 'เราโอนเงินคืนให้คุณแล้ว ตรวจสอบได้ในบัญชีที่ใช้ชำระเงิน'
+      : 'เงินจะคืนเข้าช่องทางที่คุณใช้ชำระ ระยะเวลาขึ้นอยู่กับธนาคารหรือผู้ออกบัตร (โดยทั่วไป 7-14 วันทำการ)'
+  }</p>
+  ${note}`
+      : `<p style="margin:0 0 16px">ขออภัย คำขอคืนเงิน <b>${escapeHtml(decision.amount)}</b> สำหรับคอร์สต่อไปนี้ไม่ได้รับการอนุมัติ คุณยังเข้าเรียนได้ตามปกติ</p>
+  <ul style="margin:0 0 16px;padding-left:20px">${courses}</ul>
+  ${note}`;
+
+    await this.send(
+      to,
+      decision.approved
+        ? 'คำขอคืนเงินได้รับการอนุมัติ — Learnora'
+        : 'ผลการพิจารณาคำขอคืนเงิน — Learnora',
+      this.layout(
+        decision.approved
+          ? 'อนุมัติการคืนเงินแล้ว'
+          : 'คำขอคืนเงินไม่ได้รับการอนุมัติ',
+        `${body}
+  ${this.button(url, 'ดูประวัติการซื้อ')}`,
+      ),
+    );
+  }
+
+  /** แจ้งผู้สอนว่าโอนส่วนแบ่งรายได้ให้แล้ว */
+  async sendPayoutNotice(
+    to: string,
+    payout: { amount: string; reference: string },
+  ) {
+    const url = `${this.frontendUrl}/instructor/earnings`;
+
+    await this.send(
+      to,
+      'เราโอนรายได้ให้คุณแล้ว — Learnora',
+      this.layout(
+        'โอนรายได้ให้แล้ว',
+        `<p style="margin:0 0 16px">เราโอนส่วนแบ่งรายได้จากคอร์สของคุณ <b>${escapeHtml(payout.amount)}</b> เข้าบัญชีที่คุณตั้งไว้แล้ว</p>
+  <p style="margin:0 0 16px">เลขอ้างอิงการโอน: <b>${escapeHtml(payout.reference)}</b></p>
+  ${this.button(url, 'ดูรายได้ของฉัน')}`,
       ),
     );
   }

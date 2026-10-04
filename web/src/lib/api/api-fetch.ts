@@ -1,11 +1,16 @@
 import { ApiError } from "@/lib/api/api-error";
+import { env } from "@/lib/env";
+import { redirect } from "next/navigation";
+
+/** route handler ที่ล้าง session แล้วพาไปหน้า login (app/session-expired) */
+const SESSION_EXPIRED_PATH = "/session-expired";
 
 export type ApiFetchOptions = Omit<RequestInit, "body"> & {
   body?: Record<string, unknown> | FormData;
   token?: string;
 };
 
-const API_URL = process.env.API_URL ?? "http://localhost:8000";
+const API_URL = env.API_URL;
 
 export async function apiFetch<T>(
   path: string,
@@ -30,6 +35,13 @@ export async function apiFetch<T>(
     headers: newHeaders,
   });
 
+  // ส่ง token ไปแล้วโดน 401 = session ที่ถืออยู่ใช้ไม่ได้แล้ว (token หมดอายุ
+  // บัญชีถูกลบ หรือโดนระงับ) ล็อกเอาต์ให้เลยแทนที่จะปล่อยให้หน้าพังเป็น error
+  // redirect() ทำงานด้วยการ throw จึงหยุดทั้ง server component และ action ตรงนี้
+  if (token && response.status === 401) {
+    redirect(SESSION_EXPIRED_PATH);
+  }
+
   if (!response.ok) {
     // body ของ Nest เป็น { message, statusCode } ปกติ แต่ endpoint ที่ต้องให้
     // ฝั่งเว็บแยกเคสได้จะแนบ code มาด้วย และบาง error (เช่น validation)
@@ -42,7 +54,9 @@ export async function apiFetch<T>(
 
     throw new ApiError(
       response.status,
-      Array.isArray(message) ? message.join(', ') : (message ?? response.statusText),
+      Array.isArray(message)
+        ? message.join(", ")
+        : (message ?? response.statusText),
       code,
     );
   }

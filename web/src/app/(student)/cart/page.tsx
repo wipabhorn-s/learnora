@@ -1,10 +1,12 @@
 import CourseThumbnail from "@/components/shared/CourseThumbnail";
+import EmptyState, { BROWSE_COURSES } from "@/components/shared/EmptyState";
+import { Page, PageHeader } from "@/components/shared/Page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { removeFromCartAction } from "@/lib/actions/cart.actions";
 import { CartApi } from "@/lib/api/cart.api";
-
 import { auth } from "@/lib/auth";
+import { formatCount, formatPrice, fullName } from "@/lib/format";
 import { ShoppingCart, Trash2 } from "lucide-react";
 import { Metadata } from "next";
 import Link from "next/link";
@@ -22,31 +24,28 @@ export default async function CartPage() {
   const hasUnavailable = items.some((item) => !item.isAvailable);
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col sm:min-h-[calc(100dvh-3rem)] xl:min-h-[calc(100dvh-4rem)]">
-      <h1 className="mb-7 flex flex-wrap items-center gap-x-2 gap-y-1 text-3xl font-extrabold tracking-tight">
-        <span>Your Cart</span>
-        {items.length > 0 && (
-          <span className="relative top-0.5 text-lg font-normal leading-none text-muted-foreground">
-            ({items.length} {items.length === 1 ? "course" : "courses"})
-          </span>
-        )}
-      </h1>
+    <Page height="fill">
+      <PageHeader
+        title={
+          <>
+            Your Cart
+            {items.length > 0 && (
+              <span className="ml-2 text-lg font-normal text-muted-foreground">
+                ({formatCount(items.length, "course")})
+              </span>
+            )}
+          </>
+        }
+      />
 
       {items.length === 0 ? (
-        <Card className="min-h-128 flex-1 items-center justify-center gap-0 px-6 py-16 text-center">
-          <div className="mb-6 flex size-28 items-center justify-center rounded-full bg-secondary">
-            <ShoppingCart size={60} className="text-primary/70" />
-          </div>
-          <h3 className="mb-3 text-2xl font-extrabold">Your cart is empty</h3>
-          <p className="mb-8 text-base text-muted-foreground">
-            Find a course you love and add it to your cart.
-          </p>
-          <Button
-            nativeButton={false}
-            className="h-12 rounded-xl px-9 text-base font-semibold"
-            render={<Link href="/courses">Browse Courses</Link>}
-          />
-        </Card>
+        <EmptyState
+          icon={ShoppingCart}
+          title="Your cart is empty"
+          description="Find a course you love and add it to your cart."
+          action={BROWSE_COURSES}
+          className="min-h-128"
+        />
       ) : (
         <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="space-y-4">
@@ -71,8 +70,7 @@ export default async function CartPage() {
                       {item.course.title}
                     </Link>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {item.course.instructor.firstName}{" "}
-                      {item.course.instructor.lastName}
+                      {fullName(item.course.instructor)}
                     </p>
                     {!item.isAvailable && (
                       <span className="mt-1 inline-block rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
@@ -82,7 +80,7 @@ export default async function CartPage() {
                   </div>
                   <div className="flex w-full shrink-0 items-center justify-between gap-4 sm:w-auto sm:flex-col sm:items-end">
                     <span className="text-lg font-extrabold text-primary">
-                      {price === 0 ? "Free" : `฿${price.toLocaleString()}`}
+                      {formatPrice(price)}
                     </span>
                     <form
                       action={removeFromCartAction.bind(
@@ -116,9 +114,7 @@ export default async function CartPage() {
                       {item.course.title}
                     </span>
                     <span className="shrink-0 font-medium">
-                      {Number(item.course.price) === 0
-                        ? "Free"
-                        : `฿${Number(item.course.price).toLocaleString()}`}
+                      {formatPrice(item.course.price)}
                     </span>
                   </div>
                 ))}
@@ -127,9 +123,7 @@ export default async function CartPage() {
               <div className="flex justify-between border-t border-border pt-4 font-bold">
                 <span>Total</span>
                 <span className="text-lg text-primary">
-                  {totalNumber === 0
-                    ? "Free"
-                    : `฿${totalNumber.toLocaleString()}`}
+                  {formatPrice(totalNumber)}
                 </span>
               </div>
 
@@ -149,6 +143,6 @@ export default async function CartPage() {
           </div>
         </div>
       )}
-    </div>
+    </Page>
   );
 }

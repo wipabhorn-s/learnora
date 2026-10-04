@@ -14,6 +14,7 @@ import { PurchaseModule } from './purchase/purchase.module';
 import { LearningModule } from './learning/learning.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AdminModule } from './admin/admin.module';
+import { PayoutModule } from './payout/payout.module';
 import { HashModule } from './infrastructure/hash/hash.module';
 import { JwtModule } from './infrastructure/jwt/jwt.module';
 import { APP_GUARD } from '@nestjs/core';
@@ -41,6 +42,7 @@ import { InstructorGuard } from '@/auth/guards/instructor.guard';
     LearningModule,
     DashboardModule,
     AdminModule,
+    PayoutModule,
     HashModule,
     JwtModule,
     UploadModule,

@@ -5,11 +5,12 @@ import { UserModule } from '@/user/user.module';
 import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { LoginAttemptService } from './login-attempt.service';
 import { TokenModule } from './token.module';
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, LoginAttemptService],
   imports: [UserModule, GoogleAuthModule, TokenModule],
   // re-export เพื่อให้ AuthGuard ที่ผูกเป็น APP_GUARD ใน AppModule ใช้ได้
   exports: [TokenModule],

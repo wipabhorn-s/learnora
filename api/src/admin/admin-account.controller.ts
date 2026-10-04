@@ -1,4 +1,5 @@
 import { AdminService } from '@/admin/admin.service';
+import { FindAdminsDto } from '@/admin/dto/find-admins.dto';
 import { CreateAdminDto } from '@/admin/dto/create-admin.dto';
 import { Roles } from '@/common/decorator/roles.decorator';
 import { Role } from '@/database/generated/prisma/enums';
@@ -10,6 +11,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 @Roles(Role.SUPER_ADMIN)
@@ -18,8 +20,8 @@ export class AdminAccountController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('/')
-  findAdmins() {
-    return this.adminService.findAdmins();
+  findAdmins(@Query() dto: FindAdminsDto) {
+    return this.adminService.findAdmins(dto.search);
   }
 
   @Post('/')

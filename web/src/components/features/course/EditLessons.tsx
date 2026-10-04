@@ -10,6 +10,7 @@ import {
   updateLessonAction,
 } from "@/lib/actions/lesson.action";
 import type { LessonResponse } from "@/lib/api/lesson.api";
+import { toast } from "@/lib/toast";
 import {
   GripVertical,
   Loader2,
@@ -22,9 +23,13 @@ import {
 import { ChangeEvent, DragEvent, useRef, useState, useTransition } from "react";
 
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
-const CONTROL_CLASS =
-  "h-[30px] rounded-lg border-primary/15 bg-secondary/40 px-3 text-sm shadow-none md:text-sm";
-const BUTTON_CLASS = "h-10 w-40 px-4 text-sm sm:w-52";
+const BUTTON_CLASS = "h-11 rounded-xl px-6 text-sm font-semibold";
+
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
+}
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -35,14 +40,10 @@ export default function EditLessons({
   courseId,
   lessons,
   onLessonsChange,
-  onBack,
-  onContinue,
 }: {
   courseId: number;
   lessons: LessonResponse[];
   onLessonsChange: (lessons: LessonResponse[]) => void;
-  onBack: () => void;
-  onContinue: () => void;
 }) {
   const [mode, setMode] = useState<"add" | "edit" | null>(null);
   const [editingLessonId, setEditingLessonId] = useState<number | null>(null);
@@ -128,9 +129,11 @@ export default function EditLessons({
           : await createLessonAction(courseId, formData);
 
       if (!result.success) {
-        setError(result.message);
+        toast.error(result.message);
         return;
       }
+
+      toast.success(mode === "edit" ? "Lesson saved" : "Lesson added");
 
       if (mode === "edit") {
         onLessonsChange(
@@ -154,10 +157,11 @@ export default function EditLessons({
       const result = await removeLessonAction(lesson.id);
 
       if (!result.success) {
-        setError(result.message);
+        toast.error(result.message);
         return;
       }
 
+      toast.success("Lesson deleted");
       onLessonsChange(
         lessons
           .filter((item) => item.id !== lesson.id)
@@ -203,7 +207,7 @@ export default function EditLessons({
 
       if (!result.success) {
         onLessonsChange(previousLessons);
-        setError(result.message);
+        toast.error(result.message);
         return;
       }
 
@@ -214,9 +218,14 @@ export default function EditLessons({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-bold">Step 3: Lessons</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Add, edit, delete, or drag lessons to update their order.
+        <h2 className="text-lg font-bold">
+          Lessons{" "}
+          <span className="font-medium text-muted-foreground">
+            ({lessons.length})
+          </span>
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Drag lessons to change their order.
         </p>
       </div>
 
@@ -251,7 +260,7 @@ export default function EditLessons({
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{lesson.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  {lesson.durationSeconds} seconds
+                  {formatDuration(lesson.durationSeconds)}
                 </p>
               </div>
               <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 sm:inline-flex">
@@ -283,8 +292,12 @@ export default function EditLessons({
         </div>
       ) : (
         mode === null && (
-          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-            No lessons yet. Click Add Lesson to upload the first video.
+          <div className="rounded-xl border border-dashed p-10 text-center">
+            <Video className="mx-auto mb-3 size-8 text-primary/60" />
+            <p className="font-semibold">No lessons yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Upload your first video to get this course ready to publish.
+            </p>
           </div>
         )
       )}
@@ -296,19 +309,22 @@ export default function EditLessons({
           </div>
           <div className="space-y-5 p-5">
             <Field className="gap-1">
-              <FieldLabel htmlFor="lesson-title">Lesson Title</FieldLabel>
+              <FieldLabel required htmlFor="lesson-title">
+                Lesson Title
+              </FieldLabel>
               <Input
                 id="lesson-title"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className={CONTROL_CLASS}
+                placeholder="Enter lesson title"
                 disabled={isPending}
               />
             </Field>
 
             <Field className="gap-2">
-              <FieldLabel>
-                Video Upload {mode === "edit" && "(optional)"}
+              {/* ตอนแก้บทเรียนไม่ต้องอัปโหลดใหม่ก็ได้ ใช้วิดีโอเดิม */}
+              <FieldLabel required={mode !== "edit"} optional={mode === "edit"}>
+                Video Upload
               </FieldLabel>
               <input
                 ref={videoInputRef}
@@ -405,26 +421,6 @@ export default function EditLessons({
       {error && mode === null && (
         <p className="text-sm text-destructive">{error}</p>
       )}
-
-      <div className="flex justify-between gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onBack}
-          disabled={isPending || mode !== null}
-          className={BUTTON_CLASS}
-        >
-          Back
-        </Button>
-        <Button
-          type="button"
-          onClick={onContinue}
-          disabled={isPending || mode !== null}
-          className={BUTTON_CLASS}
-        >
-          Review Course
-        </Button>
-      </div>
     </div>
   );
 }

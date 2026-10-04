@@ -7,6 +7,7 @@ import {
 } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -57,11 +58,17 @@ export class CartService {
   async addToCart(studentId: string, dto: AddToCartDto) {
     const course = await this.prisma.course.findUnique({
       where: { id: dto.courseId },
-      select: { status: true },
+      select: { status: true, instructorId: true },
     });
 
     if (!course || course.status !== StatusCourse.PUBLISHED) {
       throw new NotFoundException('Course not found');
+    }
+
+    // ผู้สอนก็คือนักเรียนที่เปิดสิทธิ์สอน (บัญชีเดียวกัน) จึงต้องกันซื้อคอร์สตัวเอง
+    // ผู้สอนดูคอร์สตัวเองได้ฟรีจากหน้าดูตัวอย่างของผู้สอนอยู่แล้ว
+    if (course.instructorId === studentId) {
+      throw new BadRequestException("You can't buy your own course");
     }
 
     const activeEnrollment = await this.prisma.purchaseItem.findFirst({

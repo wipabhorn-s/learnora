@@ -9,7 +9,8 @@ import {
   removeFromWishlistAction,
 } from "@/lib/actions/wishlist.action";
 import { CourseResponse } from "@/lib/api/course.api";
-import { BookOpen, Heart, ShoppingCart } from "lucide-react";
+import { formatPrice, fullName } from "@/lib/format";
+import { BookOpen, Heart, Pencil, ShoppingCart } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -21,6 +22,8 @@ type CourseCardProps = {
   inWishlist?: boolean;
   inCart?: boolean;
   isOwned?: boolean;
+  /** คอร์สของผู้ดูเอง (ผู้สอนก็เป็นนักเรียนได้ บัญชีเดียวกัน) ซื้อไม่ได้ */
+  isMine?: boolean;
   isAvailable?: boolean;
   returnTo?: string;
 };
@@ -33,6 +36,7 @@ export default function CourseCard({
   inWishlist = false,
   inCart = false,
   isOwned = false,
+  isMine = false,
   isAvailable = true,
   returnTo = "/courses",
 }: CourseCardProps) {
@@ -73,7 +77,7 @@ export default function CourseCard({
           className="absolute inset-0 z-10"
         />
 
-        {showActions && !isOwned && (
+        {showActions && !isOwned && !isMine && (
           <div
             className={`absolute z-20 ${dense ? "left-2 top-2" : "left-3 top-3"}`}
           >
@@ -174,7 +178,7 @@ export default function CourseCard({
         <p
           className={`${dense ? "text-[11px] leading-4" : "text-xs"} text-muted-foreground`}
         >
-          {course.instructor.firstName} {course.instructor.lastName}
+          {fullName(course.instructor)}
         </p>
 
         <div
@@ -185,11 +189,12 @@ export default function CourseCard({
           <span
             className={`${dense ? "text-sm" : "text-lg"} font-extrabold text-primary`}
           >
-            {price === 0 ? "Free" : `฿${price.toLocaleString()}`}
+            {formatPrice(price)}
           </span>
 
-          {showActions && isAvailable && (
-            viewer === "GUEST" ? (
+          {showActions &&
+            isAvailable &&
+            (viewer === "GUEST" ? (
               <Button
                 nativeButton={false}
                 size={dense ? "xs" : "sm"}
@@ -199,6 +204,19 @@ export default function CourseCard({
                   <Link href="/login">
                     <ShoppingCart size={15} />
                     Add to Cart
+                  </Link>
+                }
+              />
+            ) : isMine ? (
+              <Button
+                nativeButton={false}
+                size={dense ? "xs" : "sm"}
+                variant="outline"
+                className={`${dense ? "px-2.5" : "px-4"} rounded-full`}
+                render={
+                  <Link href={`/instructor/courses/${course.id}/edit`}>
+                    <Pencil size={15} />
+                    Your course
                   </Link>
                 }
               />
@@ -217,10 +235,11 @@ export default function CourseCard({
               />
             ) : (
               <form
-                action={(inCart
-                  ? removeFromCartAction
-                  : addToCartAction
-                ).bind(null, course.id, returnTo)}
+                action={(inCart ? removeFromCartAction : addToCartAction).bind(
+                  null,
+                  course.id,
+                  returnTo,
+                )}
               >
                 <Button
                   type="submit"
@@ -234,8 +253,7 @@ export default function CourseCard({
                   {inCart ? "Remove" : "Add to Cart"}
                 </Button>
               </form>
-            )
-          )}
+            ))}
         </div>
       </div>
     </Card>

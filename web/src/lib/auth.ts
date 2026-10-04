@@ -1,6 +1,12 @@
 import { ApiError } from "@/lib/api/api-error";
-import { AuthApi } from "@/lib/api/auth.api";
 import { UserResponse } from "@/lib/api/api.type";
+import { AuthApi } from "@/lib/api/auth.api";
+import { env } from "@/lib/env";
+import {
+  clearLoginChallenge,
+  getLoginChallenge,
+  setLoginChallenge,
+} from "@/lib/login-challenge";
 import { loginSchema } from "@/lib/schemas/auth.schema";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import { JWT } from "next-auth/jwt";
@@ -28,6 +34,49 @@ function toApiError(error: unknown): ApiError | null {
   return error instanceof ApiError ? error : null;
 }
 
+/** แปลง error จาก API เป็น LoginError ให้ server action แยกข้อความได้ */
+function toLoginError(error: unknown, fallback: string): LoginError {
+  const apiError = toApiError(error);
+
+  // API ล่มหรือต่อไม่ติด ไม่ใช่ "รหัสผ่านผิด" — ต้องแยกให้ออก
+  // ไม่งั้นผู้ใช้จะนั่งพิมพ์รหัสซ้ำทั้งที่ไม่มีอะไรผิดเลย
+  if (!apiError) return new LoginError("SERVICE_UNAVAILABLE");
+
+  // LoginError พาไปได้แค่ code จึงฝากจำนวนครั้งที่เหลือไว้ท้าย code
+  if (apiError.code === "OTP_INVALID") {
+    const remaining = /(\d+) attempt/.exec(apiError.message)?.[1];
+    return new LoginError(
+      remaining ? `OTP_INVALID:${remaining}` : "OTP_INVALID",
+    );
+  }
+  // ล็อกชั่วคราวเพราะใส่รหัสผ่านผิดหลายครั้ง ฝากจำนวนนาทีที่ต้องรอไว้ท้าย code
+  if (apiError.code === "TOO_MANY_ATTEMPTS") {
+    const minutes = /in (\d+) minute/.exec(apiError.message)?.[1];
+    return new LoginError(
+      minutes ? `TOO_MANY_ATTEMPTS:${minutes}` : "TOO_MANY_ATTEMPTS",
+    );
+  }
+
+  return new LoginError(apiError.code ?? fallback);
+}
+
+/** ขั้นที่ 2 ของการล็อกอินเมื่อเปิด 2FA: รหัส 6 หลัก + challengeId ในคุกกี้ */
+async function authorizeWithCode(code: string) {
+  const challengeId = await getLoginChallenge();
+  if (!challengeId) throw new LoginError("OTP_SESSION_EXPIRED");
+
+  try {
+    const { access_token, user } = await AuthApi.verifyLoginCode(
+      challengeId,
+      code,
+    );
+    await clearLoginChallenge();
+    return { ...user, access_token };
+  } catch (error) {
+    throw toLoginError(error, "OTP_INVALID");
+  }
+}
+
 function fillToken(token: JWT, user: UserResponse, accessToken: string): JWT {
   token.sub = user.id;
   token.firstName = user.firstName;
@@ -47,32 +96,37 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   providers: [
     Credentials({
       async authorize(input) {
+        if (typeof input?.code === "string") {
+          return authorizeWithCode(input.code);
+        }
+
         const parsed = loginSchema.safeParse(input);
 
         if (!parsed.success) {
           throw new LoginError("INVALID_CREDENTIALS");
         }
 
+        let result: Awaited<ReturnType<typeof AuthApi.login>>;
         try {
-          const { access_token, user } = await AuthApi.login(parsed.data);
-          return { ...user, access_token };
+          result = await AuthApi.login(parsed.data);
         } catch (error) {
-          const apiError = toApiError(error);
-
-          if (!apiError) {
-            // API ล่มหรือต่อไม่ติด ไม่ใช่ "รหัสผ่านผิด" — ต้องแยกให้ออก
-            // ไม่งั้นผู้ใช้จะนั่งพิมพ์รหัสซ้ำทั้งที่ไม่มีอะไรผิดเลย
-            throw new LoginError("SERVICE_UNAVAILABLE");
-          }
-
-          throw new LoginError(apiError.code ?? "INVALID_CREDENTIALS");
+          throw toLoginError(error, "INVALID_CREDENTIALS");
         }
+
+        // เปิด 2FA ไว้: ยังไม่ออก session จำ challengeId ไว้แล้วให้หน้าเว็บ
+        // สลับไปช่องใส่รหัส 6 หลัก (ขั้นที่ 2 เข้ามาทาง authorizeWithCode)
+        if ("codeRequired" in result) {
+          await setLoginChallenge(result.challengeId);
+          throw new LoginError("CODE_REQUIRED");
+        }
+
+        return { ...result.user, access_token: result.access_token };
       },
     }),
 
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
     }),
   ],
 

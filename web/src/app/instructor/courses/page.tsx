@@ -1,12 +1,15 @@
 import CourseRowActions from "@/components/features/course/CourseRowActions";
 import CourseStatusControl from "@/components/features/course/CourseStatusControl";
+import CourseThumbnail from "@/components/shared/CourseThumbnail";
+import EmptyState from "@/components/shared/EmptyState";
+import { Page, PageHeader } from "@/components/shared/Page";
 import Pagination from "@/components/shared/Pagination";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CourseApi } from "@/lib/api/course.api";
 import { auth } from "@/lib/auth";
+import { formatEnum, formatPrice } from "@/lib/format";
 import { BookOpen, Plus } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -36,43 +39,32 @@ export default async function InstructorCoursesPage({
       : `/instructor/courses?page=${nextPage}`;
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl flex-col gap-6 xl:h-[calc(100dvh-4rem)] xl:min-h-0 xl:overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold">My Courses</h1>
-          <p className="mt-1 text-muted-foreground">
-            Manage your published and draft courses
-          </p>
-        </div>
-
-        <Link
-          href="/instructor/courses/new"
-          className={buttonVariants({ size: "lg" })}
-        >
-          <Plus />
-          Create Course
-        </Link>
-      </div>
-
-      {courses.length === 0 ? (
-        <Card className="min-h-128 flex-1 items-center justify-center gap-0 px-6 py-16 text-center">
-          <div className="mb-6 flex size-28 items-center justify-center rounded-full bg-secondary">
-            <BookOpen size={60} className="text-primary/70" />
-          </div>
-          <h2 className="mb-3 text-2xl font-extrabold">No courses yet</h2>
-          <p className="mb-8 text-base text-muted-foreground">
-            Create your first course to get started.
-          </p>
+    <Page height="fit">
+      <PageHeader title="My Courses">
+        {/* ยังไม่มีคอร์ส ปุ่มสร้างอยู่กลางการ์ดว่างอยู่แล้ว ไม่ต้องมีซ้ำด้านบน */}
+        {courses.length > 0 && (
           <Link
             href="/instructor/courses/new"
-            className={buttonVariants({
-              className: "h-12 rounded-xl px-9 text-base font-semibold",
-            })}
+            className={buttonVariants({ size: "lg" })}
           >
             <Plus />
             Create Course
           </Link>
-        </Card>
+        )}
+      </PageHeader>
+
+      {courses.length === 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          title="No courses yet"
+          description="Create your first course to get started."
+          action={{
+            label: "Create Course",
+            href: "/instructor/courses/new",
+            icon: Plus,
+          }}
+          className="min-h-128"
+        />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <Card className="min-h-0 flex-1 gap-0 overflow-hidden p-0 shadow-sm">
@@ -93,15 +85,12 @@ export default async function InstructorCoursesPage({
                     <tr key={course.id} className="border-b last:border-0">
                       <td className="py-3 pr-6">
                         <div className="flex min-w-72 items-center gap-4">
-                          <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-xl bg-muted">
-                            <Image
-                              src={course.thumbnailUrl ?? "/course.png"}
-                              alt={course.title}
-                              fill
-                              sizes="80px"
-                              className="object-cover"
-                            />
-                          </div>
+                          <CourseThumbnail
+                            src={course.thumbnailUrl}
+                            alt={course.title}
+                            sizes="80px"
+                            className="h-12 w-20 shrink-0 rounded-xl"
+                          />
                           <span className="line-clamp-2 font-semibold">
                             {course.title}
                           </span>
@@ -109,16 +98,11 @@ export default async function InstructorCoursesPage({
                       </td>
 
                       <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {course.category
-                          .replaceAll("_", " ")
-                          .toLowerCase()
-                          .replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                        {formatEnum(course.category)}
                       </td>
 
                       <td className="px-4 py-3 font-semibold">
-                        {Number(course.price) === 0
-                          ? "Free"
-                          : `฿${Number(course.price).toLocaleString()}`}
+                        {formatPrice(course.price)}
                       </td>
 
                       <td className="px-4 py-3">
@@ -151,6 +135,6 @@ export default async function InstructorCoursesPage({
           </div>
         </div>
       )}
-    </div>
+    </Page>
   );
 }
