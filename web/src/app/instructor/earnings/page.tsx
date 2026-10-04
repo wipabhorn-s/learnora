@@ -17,13 +17,13 @@ export default async function InstructorEarningsPage() {
   const earnings = await PayoutApi.getEarnings(session!.user.access_token);
 
   return (
-    <Page>
+    <Page height="fit">
       <PageHeader
         title="Earnings"
         description={`You receive ${earnings.sharePercent}% of every sale. Money becomes available ${LEGAL.REFUND_WINDOW_DAYS} days after purchase, once the refund window has closed.`}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<Wallet size={22} />}
           iconClassName="bg-emerald-50 text-emerald-600"
@@ -50,13 +50,16 @@ export default async function InstructorEarningsPage() {
         />
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        <PayoutAccountForm account={earnings.account} />
+      {/* สองการ์ดสูงเท่ากัน ยืดเต็มพื้นที่ที่เหลือของจอ ประวัติยาวก็เลื่อนในการ์ดเอง */}
+      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <PayoutAccountForm account={earnings.account} className="h-full" />
 
         {earnings.payouts.length > 0 ? (
-          <Card className="gap-0 overflow-hidden p-0">
-            <h2 className="border-b px-6 py-4 font-bold">Payout history</h2>
-            <ul className="divide-y">
+          <Card className="h-full min-h-80 gap-0 overflow-hidden p-0">
+            <h2 className="shrink-0 border-b px-6 py-4 font-bold">
+              Payout history
+            </h2>
+            <ul className="min-h-0 flex-1 divide-y overflow-y-auto">
               {earnings.payouts.map((payout) => (
                 <li
                   key={payout.id}
@@ -86,7 +89,7 @@ export default async function InstructorEarningsPage() {
                 ? "Your payouts will show up here once we transfer your earnings."
                 : "Add your payout account so we can transfer your earnings."
             }
-            className="min-h-80"
+            className="h-full min-h-80"
           />
         )}
       </div>

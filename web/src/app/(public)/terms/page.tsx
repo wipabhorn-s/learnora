@@ -170,8 +170,19 @@ export default function TermsPage() {
                   repeated valid complaints.
                 </li>
                 <li>
-                  Revenue share and payouts for paid courses are set out in a
-                  separate instructor agreement.
+                  You receive{" "}
+                  <strong>
+                    {LEGAL.INSTRUCTOR_SHARE_PERCENT}% of the price of every paid
+                    sale
+                  </strong>
+                  . A sale becomes payable {LEGAL.REFUND_WINDOW_DAYS} days after
+                  purchase, once the refund window has closed and no refund
+                  request is under review. We pay by bank transfer to the payout
+                  account you add on your Earnings page.
+                </li>
+                <li>
+                  If a sale is refunded after we have paid you for it, the
+                  amount is deducted from your next payout.
                 </li>
               </ul>
             </>

@@ -1,5 +1,6 @@
 import AuthHeader from "@/components/features/auth/AuthHeader";
 import LoginForm from "@/components/features/auth/LoginForm";
+import LoginHello from "@/components/features/auth/LoginHello";
 import TextLink from "@/components/shared/TextLink";
 import { Metadata } from "next";
 
@@ -28,7 +29,12 @@ export default async function LoginPage({
 
   return (
     <>
+      {/* จอเล็กไม่มีฝั่งซ้าย (AuthHero) แสดงแม่มดตัวเล็กเหนือฟอร์มแทน */}
+      <LoginHello sizes="160px" className="mx-auto w-40 lg:hidden" />
+
       <AuthHeader
+        // มือถือ: อยู่กึ่งกลางใต้รูปแม่มด  จอใหญ่: ชิดซ้ายตามฟอร์ม
+        className="text-center lg:text-left"
         title="Log in to Learnora"
         description={
           <>

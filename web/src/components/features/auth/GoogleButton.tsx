@@ -4,6 +4,7 @@ import { loginWithGoogleAction } from "@/lib/actions/auth.action";
 export default function GoogleButton({
   label,
   asInstructor = false,
+  disabled = false,
 }: {
   label: string;
   /**
@@ -11,6 +12,8 @@ export default function GoogleButton({
    * Google — server action จะเก็บลงคุกกี้ให้ก่อน redirect
    */
   asInstructor?: boolean;
+  /** หน้าสมัคร: กดไม่ได้จนกว่าจะติ๊กยอมรับข้อตกลง */
+  disabled?: boolean;
 }) {
   return (
     <form action={loginWithGoogleAction}>
@@ -19,7 +22,13 @@ export default function GoogleButton({
         name="asInstructor"
         value={asInstructor ? "true" : "false"}
       />
-      <Button type="submit" variant="outline" size="lg" className="w-full">
+      <Button
+        type="submit"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        disabled={disabled}
+      >
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
             fill="#4285F4"

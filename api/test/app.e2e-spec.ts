@@ -59,6 +59,23 @@ describe('Learnora API (e2e)', () => {
     return request(app.getHttpServer()).get('/cart').expect(401);
   });
 
+  it('POST /auth/register refuses a sign-up without accepting the Terms', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        firstName: 'Ann',
+        lastName: 'Lee',
+        email: `${randomUUID()}@test.local`,
+        password: 'Learnora1!',
+        acceptTerms: false,
+      })
+      .expect(400);
+
+    expect(JSON.stringify(response.body)).toContain(
+      'Please accept the Terms of Service and Privacy Policy',
+    );
+  });
+
   it.each([
     ['get', '/instructor/earnings'],
     ['put', '/instructor/earnings/account'],
