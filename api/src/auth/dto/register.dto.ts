@@ -4,6 +4,7 @@ import { StrongPassword } from '@/common/decorator/strong-password.decorator';
 import { Trim } from '@/common/decorator/trim.decorator';
 import { Type } from 'class-transformer';
 import {
+  Equals,
   IsBoolean,
   IsEmail,
   IsNotEmpty,
@@ -40,4 +41,10 @@ export class RegisterDto {
   @Type(() => Boolean)
   @IsBoolean()
   isInstructor?: boolean;
+
+  /** ติ๊กยอมรับ Terms of Service และ Privacy Policy ในหน้าสมัครแล้ว */
+  @Equals(true, {
+    message: 'Please accept the Terms of Service and Privacy Policy',
+  })
+  acceptTerms: boolean;
 }

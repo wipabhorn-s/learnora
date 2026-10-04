@@ -106,8 +106,12 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    // acceptTerms ผ่าน DTO มาแล้ว (ต้องเป็น true) createUser บันทึกเวลาที่ยอมรับให้
     const user = await this.userService.createUser({
-      ...dto,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
+      password: dto.password,
       isInstructor: dto.isInstructor ?? false,
     });
 

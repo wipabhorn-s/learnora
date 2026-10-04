@@ -11,14 +11,16 @@ export default function AuthHeader({
   description,
   icon: Icon,
   tone = "primary",
+  className,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   icon?: LucideIcon;
   tone?: "primary" | "destructive";
+  className?: string;
 }) {
   return (
-    <div className={Icon ? "text-center" : undefined}>
+    <div className={cn(Icon && "text-center", className)}>
       {Icon && (
         <div
           className={cn(

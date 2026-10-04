@@ -17,6 +17,7 @@ import {
   payoutAccountSchema,
 } from "@/lib/schemas/payout.schema";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -39,8 +40,10 @@ const FIELDS = [
 /** บัญชีธนาคารที่ผู้สอนใช้รับเงิน แอดมินโอนเข้าบัญชีนี้ */
 export default function PayoutAccountForm({
   account,
+  className,
 }: {
   account: PayoutAccount | null;
+  className?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -71,7 +74,7 @@ export default function PayoutAccountForm({
   };
 
   return (
-    <Card className="p-6">
+    <Card className={cn("overflow-y-auto p-6", className)}>
       <form method="post" onSubmit={handleSubmit(onSubmit)}>
         <FieldGroup className="gap-4">
           <div>

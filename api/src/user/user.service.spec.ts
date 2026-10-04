@@ -237,3 +237,61 @@ describe('UserService.requestDeleteAccountCode', () => {
     expect(mail.sendOneTimeCode).not.toHaveBeenCalled();
   });
 });
+
+describe('UserService.becomeInstructor', () => {
+  function setupInstructor(isInstructor = false) {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          email: 'ann@test.local',
+          role: Role.STUDENT,
+          isInstructor,
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const accessToken = { sign: jest.fn().mockResolvedValue('new-token') };
+    const service = new UserService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      accessToken as never,
+      {} as never,
+    );
+    return { service, prisma, accessToken };
+  }
+
+  it('refuses without accepting the instructor terms', async () => {
+    const { service, prisma } = setupInstructor();
+
+    await expect(service.becomeInstructor(USER_ID, false)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('enables teaching and records when the terms were accepted', async () => {
+    const { service, prisma } = setupInstructor();
+
+    const result = await service.becomeInstructor(USER_ID, true);
+
+    const [[args]] = prisma.user.update.mock.calls as [
+      [{ where: unknown; data: { instructorTermsAcceptedAt: unknown } }],
+    ];
+    expect(args.where).toEqual({ id: USER_ID });
+    expect(args.data).toMatchObject({ isInstructor: true });
+    expect(args.data.instructorTermsAcceptedAt).toBeInstanceOf(Date);
+    expect(result.access_token).toBe('new-token');
+  });
+
+  it('does not overwrite the acceptance date for existing instructors', async () => {
+    const { service, prisma } = setupInstructor(true);
+
+    await service.becomeInstructor(USER_ID, true);
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});

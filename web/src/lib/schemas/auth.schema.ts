@@ -9,6 +9,10 @@ export const registerSchema = z.object({
   // แทน role เดิม — ทุกคนสมัครมาเป็นผู้ใช้ที่ซื้อและเรียนคอร์สได้เหมือนกัน
   // ค่านี้บอกแค่ว่าเปิดสิทธิ์สอนให้ตั้งแต่แรกด้วยไหม เปลี่ยนทีหลังได้
   isInstructor: z.boolean(),
+  // ต้องติ๊กยอมรับ Terms / Privacy ก่อนสมัคร (API บังคับซ้ำ และบันทึกเวลาไว้)
+  acceptTerms: z.boolean().refine((accepted) => accepted, {
+    message: "Please accept the Terms of Service and Privacy Policy",
+  }),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

@@ -54,6 +54,10 @@ export class UserService {
           password: hash,
           role: Role.STUDENT,
           isInstructor,
+          // สมัครได้ต่อเมื่อติ๊กยอมรับ Terms แล้ว (RegisterDto บังคับ)
+          termsAcceptedAt: new Date(),
+          // สมัครเป็นผู้สอนตั้งแต่แรก = ยอมรับ Terms (รวมส่วนผู้สอน) ตอนกดสมัคร
+          instructorTermsAcceptedAt: isInstructor ? new Date() : null,
         },
         omit: { avatarPublicId: true },
       });
@@ -109,7 +113,14 @@ export class UserService {
     return this.prisma.user.create({
       // Google ยืนยันอีเมลให้แล้ว (GoogleAuthService ปฏิเสธ token ที่
       // email_verified = false) จึงไม่ต้องให้กดลิงก์ยืนยันซ้ำอีกรอบ
-      data: { ...input, role: Role.STUDENT, emailVerifiedAt: new Date() },
+      data: {
+        ...input,
+        role: Role.STUDENT,
+        emailVerifiedAt: new Date(),
+        // ปุ่ม Google ในหน้าสมัคร/ล็อกอินมีข้อความแจ้งว่ากดแล้วถือว่ายอมรับ Terms
+        termsAcceptedAt: new Date(),
+        instructorTermsAcceptedAt: input.isInstructor ? new Date() : null,
+      },
       omit: { avatarPublicId: true },
     });
   }
@@ -680,7 +691,15 @@ export class UserService {
    * ใน token ไม่ได้ถามฐานข้อมูลทุกครั้ง ถ้าไม่เปลี่ยน token ให้ ผู้ใช้จะยัง
    * โดนปฏิเสธจากทุก endpoint ฝั่งสอนจนกว่าจะล็อกอินใหม่
    */
-  async becomeInstructor(userId: string) {
+  async becomeInstructor(userId: string, acceptTerms: boolean) {
+    // DTO ตรวจแล้ว เช็กซ้ำไว้กันคนเรียก service นี้จากที่อื่นโดยไม่ผ่านข้อตกลง
+    if (!acceptTerms) {
+      throw new BadRequestException({
+        message: 'Please accept the instructor terms to start teaching',
+        code: 'TERMS_NOT_ACCEPTED',
+      });
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { email: true, role: true, isInstructor: true },
@@ -691,9 +710,10 @@ export class UserService {
     }
 
     if (!user.isInstructor) {
+      // ต้องยอมรับข้อตกลงผู้สอนก่อน (DTO บังคับ acceptTerms = true) เก็บเวลาไว้เป็นหลักฐาน
       await this.prisma.user.update({
         where: { id: userId },
-        data: { isInstructor: true },
+        data: { isInstructor: true, instructorTermsAcceptedAt: new Date() },
       });
     }
 

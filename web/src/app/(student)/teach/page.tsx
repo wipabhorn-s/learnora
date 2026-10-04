@@ -1,7 +1,8 @@
-import BecomeInstructorButton from "@/components/features/teach/BecomeInstructorButton";
+import BecomeInstructorForm from "@/components/features/teach/BecomeInstructorForm";
 import EmptyState from "@/components/shared/EmptyState";
 import { Page, PageHeader } from "@/components/shared/Page";
 import { auth } from "@/lib/auth";
+import { LEGAL } from "@/lib/constants/legal";
 import { WORKSPACE_HOME } from "@/lib/constants/workspace";
 import { Presentation } from "lucide-react";
 import { Metadata } from "next";
@@ -21,10 +22,10 @@ export default async function TeachPage() {
       <EmptyState
         icon={Presentation}
         title="Teach on Learnora"
-        description="Share what you know with learners. It's the same account — you can switch between learning and teaching anytime."
+        description={`Share what you know with learners and keep ${LEGAL.INSTRUCTOR_SHARE_PERCENT}% of every sale. It's the same account — you can switch between learning and teaching anytime.`}
         className="min-h-128"
       >
-        <BecomeInstructorButton />
+        <BecomeInstructorForm />
       </EmptyState>
     </Page>
   );

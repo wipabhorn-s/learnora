@@ -262,13 +262,16 @@ export async function deleteAccountAction(
 }
 
 /** สำเร็จแล้วพาเข้าฝั่งสอนทันที ไม่คืนค่าอะไร (redirect) คืนเฉพาะตอนผิดพลาด */
-export async function becomeInstructorAction(): Promise<ErrorActionResult | void> {
+export async function becomeInstructorAction(
+  acceptTerms: boolean,
+): Promise<ErrorActionResult | void> {
   const session = await auth();
   if (!session) return UNAUTHORIZED;
 
   try {
     const { access_token } = await UserApi.becomeInstructor(
       session.user.access_token,
+      acceptTerms,
     );
 
     // API ออก token ใบใหม่ที่มีสิทธิ์สอนมาให้ ต้องเก็บลง session แทนใบเดิม

@@ -116,10 +116,11 @@ export const UserApi = {
     });
   },
 
-  becomeInstructor(token: string) {
+  /** acceptTerms: ผู้ใช้ติ๊กยอมรับข้อตกลงผู้สอนแล้ว (API ปฏิเสธถ้าไม่ใช่ true) */
+  becomeInstructor(token: string, acceptTerms: boolean) {
     return apiFetch<{ message: string; access_token: string }>(
       "/users/me/instructor",
-      { method: "POST", token },
+      { method: "POST", body: { acceptTerms }, token },
     );
   },
 };

@@ -52,10 +52,17 @@ describe("signupSchema", () => {
     password: "Learnora1!",
     confirmPassword: "Learnora1!",
     isInstructor: false,
+    acceptTerms: true,
   };
 
   it("accepts a valid sign-up", () => {
     expect(signupSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("requires accepting the Terms and Privacy Policy", () => {
+    expect(
+      firstError(signupSchema.safeParse({ ...valid, acceptTerms: false })),
+    ).toBe("Please accept the Terms of Service and Privacy Policy");
   });
 
   it("points the mismatch error at the confirm field", () => {

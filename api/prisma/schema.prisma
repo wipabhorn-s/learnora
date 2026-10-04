@@ -24,29 +24,35 @@ enum Role {
 /// isInstructor ต่างหาก เพราะคนคนเดียวเป็นได้ทั้งผู้เรียนและผู้สอนพร้อมกัน
 /// (แบบ Udemy) ถ้าผูกไว้กับ role ผู้สอนจะซื้อและเรียนคอร์สคนอื่นไม่ได้เลย
 model User {
-  id               String    @id @default(uuid()) @db.Uuid
-  firstName        String    @map("first_name")
-  lastName         String    @map("last_name")
-  avatarUrl        String?   @map("avatar_url")
-  avatarPublicId   String?   @map("avatar_public_id")
-  role             Role
-  isInstructor     Boolean   @default(false) @map("is_instructor")
-  status           Boolean   @default(true)
-  email            String    @unique @db.Citext // sensitive case Ann@mail.com = ann@mail.com
+  id                        String    @id @default(uuid()) @db.Uuid
+  firstName                 String    @map("first_name")
+  lastName                  String    @map("last_name")
+  avatarUrl                 String?   @map("avatar_url")
+  avatarPublicId            String?   @map("avatar_public_id")
+  role                      Role
+  isInstructor              Boolean   @default(false) @map("is_instructor")
+  /// วันที่ยอมรับ Terms of Service / Privacy Policy ตอนสมัคร (ติ๊กในหน้าสมัคร
+  /// หรือกด Continue with Google ที่มีข้อความแจ้งไว้) เก็บไว้เป็นหลักฐาน
+  termsAcceptedAt           DateTime? @map("terms_accepted_at") @db.Timestamptz(2)
+  /// วันที่ยอมรับข้อตกลงผู้สอนใน Terms (ส่วนแบ่งรายได้ การจ่ายเงิน สิทธิ์ในเนื้อหา)
+  /// ก่อนเปิดสิทธิ์สอน เก็บไว้เป็นหลักฐาน
+  instructorTermsAcceptedAt DateTime? @map("instructor_terms_accepted_at") @db.Timestamptz(2)
+  status                    Boolean   @default(true)
+  email                     String    @unique @db.Citext // sensitive case Ann@mail.com = ann@mail.com
   /// null = ยังไม่ได้กดลิงก์ยืนยันในอีเมล -> ล็อกอินด้วยรหัสผ่านไม่ได้
   /// บัญชีที่มาทาง Google ถือว่ายืนยันแล้วทันที เพราะ Google ยืนยันให้
-  emailVerifiedAt  DateTime? @map("email_verified_at") @db.Timestamptz(2)
-  password         String?
-  googleId         String?   @unique @map("google_id")
+  emailVerifiedAt           DateTime? @map("email_verified_at") @db.Timestamptz(2)
+  password                  String?
+  googleId                  String?   @unique @map("google_id")
   /// แนะนำตัวผู้สอน แสดงในหน้าคอร์สส่วน About the instructor
-  bio              String?   @db.VarChar(1000)
+  bio                       String?   @db.VarChar(1000)
   /// เปิดแล้ว ล็อกอินด้วยรหัสผ่านต้องใส่รหัส 6 หลักที่ส่งไปทางอีเมลอีกชั้น
   /// (ล็อกอินด้วย Google ไม่ต้อง เพราะ Google ยืนยันตัวตนให้แล้ว)
-  twoFactorEnabled Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorEnabled          Boolean   @default(false) @map("two_factor_enabled")
   /// ผู้ใช้ลบบัญชีเอง: ข้อมูลส่วนตัวถูกลบ/แทนที่แล้ว เหลือแถวไว้ผูกกับประวัติการซื้อ
-  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(2)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(2)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(2)
+  deletedAt                 DateTime? @map("deleted_at") @db.Timestamptz(2)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(2)
+  updatedAt                 DateTime  @updatedAt @map("updated_at") @db.Timestamptz(2)
 
   courses                 Course[]
   wishlists               Wishlist[]

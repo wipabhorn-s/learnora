@@ -2,6 +2,7 @@
 
 import { VerifyLoginCodeDto } from '@/auth/dto/verify-login-code.dto';
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
+import { BecomeInstructorDto } from '@/user/dto/become-instructor.dto';
 import { ChangeEmailDto } from '@/user/dto/change-email.dto';
 import { ChangePasswordDto } from '@/user/dto/change-password.dto';
 import { ConnectGoogleDto } from '@/user/dto/connect-google.dto';
@@ -137,8 +138,11 @@ export class UserController {
 
   @HttpCode(HttpStatus.OK)
   @Post('me/instructor')
-  becomeInstructor(@CurrentUser('sub') userId: string) {
-    return this.userService.becomeInstructor(userId);
+  becomeInstructor(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: BecomeInstructorDto,
+  ) {
+    return this.userService.becomeInstructor(userId, dto.acceptTerms);
   }
 
   /** บัญชีที่ไม่มีรหัสผ่าน: ขอรหัสยืนยันการลบบัญชีทางอีเมล */
