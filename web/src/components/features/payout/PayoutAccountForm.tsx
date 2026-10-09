@@ -61,10 +61,10 @@ export default function PayoutAccountForm({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  // มีบัญชีแล้ว: แสดงแบบอ่านอย่างเดียว กด Edit ก่อนถึงแก้ได้ (กันแก้พลาดโดยไม่ตั้งใจ)
+  // มีบัญชีแล้ว: ช่องถูกปิด (disabled) กด Edit ก่อนถึงแก้ได้ (กันแก้พลาดโดยไม่ตั้งใจ)
   // บัญชีเก่าที่ยังไม่มีรหัสธนาคาร เปิดโหมดแก้ไขไว้เลยเพราะต้องเลือกธนาคารใหม่
   const [editing, setEditing] = useState(!account?.bankCode);
-  const readOnly = !editing;
+  const locked = !editing;
 
   const {
     control,
@@ -126,8 +126,7 @@ export default function PayoutAccountForm({
                   filter={matchesBank}
                   // พิมพ์ค้นแล้วกด Enter ได้เลย เลือกรายการแรกที่ตรง
                   autoHighlight
-                  readOnly={readOnly}
-                  disabled={isPending}
+                  disabled={locked || isPending}
                 >
                   <ComboboxInput
                     id="bankCode"
@@ -179,8 +178,7 @@ export default function PayoutAccountForm({
                     placeholder={placeholder}
                     inputMode={name === "accountNumber" ? "numeric" : undefined}
                     {...field}
-                    readOnly={readOnly}
-                    disabled={isPending}
+                    disabled={locked || isPending}
                     aria-invalid={fieldState.invalid}
                   />
                   {fieldState.invalid && (
@@ -195,7 +193,7 @@ export default function PayoutAccountForm({
               key แยกทุกปุ่ม: ปุ่ม Edit (type=button) ต้องไม่กลายเป็นปุ่ม submit ตัวเดิม
               ไม่งั้นคลิกเดียวกันนั้นจะส่งฟอร์มทันทีหลังสลับเป็นโหมดแก้ไข
             */}
-          {readOnly ? (
+          {locked ? (
             <Button
               key="edit"
               type="button"
