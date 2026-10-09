@@ -26,10 +26,11 @@ describe("PayoutAccountForm", () => {
     vi.mocked(savePayoutAccountAction).mockReset();
   });
 
-  it("shows a saved account read-only with an Edit button", () => {
+  it("shows a saved account with fields disabled until Edit", () => {
     render(<PayoutAccountForm account={account} />);
 
-    expect(holderName()).toHaveAttribute("readonly");
+    expect(holderName()).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /Bank/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Update account" }),
@@ -42,7 +43,7 @@ describe("PayoutAccountForm", () => {
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
 
-    expect(holderName()).not.toHaveAttribute("readonly");
+    expect(holderName()).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "Update account" }),
     ).toBeDisabled();
@@ -64,14 +65,14 @@ describe("PayoutAccountForm", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(holderName()).toHaveValue("Ann Teacher");
-    expect(holderName()).toHaveAttribute("readonly");
+    expect(holderName()).toBeDisabled();
     expect(savePayoutAccountAction).not.toHaveBeenCalled();
   });
 
   it("starts editable with only Save when there is no account yet", () => {
     render(<PayoutAccountForm account={null} />);
 
-    expect(holderName()).not.toHaveAttribute("readonly");
+    expect(holderName()).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "Save account" }),
     ).toBeInTheDocument();

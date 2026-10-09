@@ -19,14 +19,14 @@ function ComboboxInput({
       <ComboboxPrimitive.Input
         data-slot="combobox-input"
         className={cn(
-          "peer h-11 w-full min-w-0 rounded-xl border border-border bg-muted py-2.5 pr-11 pl-4 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30",
+          "peer h-11 w-full min-w-0 rounded-xl border border-border bg-muted py-2.5 pr-11 pl-4 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30",
           className,
         )}
         {...props}
       />
       <ComboboxPrimitive.Trigger
         aria-label="Show options"
-        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-muted-foreground outline-none hover:text-foreground disabled:pointer-events-none peer-data-readonly:hidden"
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-muted-foreground outline-none hover:text-foreground disabled:pointer-events-none peer-disabled:hidden peer-data-readonly:hidden"
       >
         <ChevronDownIcon className="size-4" />
       </ComboboxPrimitive.Trigger>
