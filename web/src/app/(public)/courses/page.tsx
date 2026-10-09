@@ -11,6 +11,7 @@ import { WishlistApi } from "@/lib/api/wishlist.api";
 import { auth } from "@/lib/auth";
 import { FILTER_KEYS } from "@/lib/constants/course-filters";
 import { formatEnum } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { CATEGORIES } from "@/lib/schemas/course.schema";
 import { BookOpen, SearchX } from "lucide-react";
 import { Metadata } from "next";
@@ -100,79 +101,87 @@ export default async function CoursesPage({
     return `/courses?${query.toString()}`;
   };
 
+  const hasCourses = data.courses.length > 0;
+
   // กรองหรือค้นหาอยู่ = หน้าว่างเพราะตัวกรอง ไม่ใช่เพราะยังไม่มีคอร์สเลย
   const isFiltered = FILTER_KEYS.some(
     (key) => params[key as keyof SearchParams],
   );
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl gap-8 px-6 py-8">
+    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl flex-col px-6 py-8">
       {/* หัวข้อหน้าไม่แสดง (ผู้ใช้รู้อยู่แล้วว่าอยู่หน้าไหน) แต่ยังมี h1 ให้ screen reader */}
       <h1 className="sr-only">Courses</h1>
 
-      <aside className="hidden w-60 shrink-0 lg:block">
-        <Card className="sticky top-24 p-5">
-          <CourseFilters />
-        </Card>
-      </aside>
+      {/*
+          มีคอร์ส: แถวยืดเต็มหน้า pagination ไปอยู่ล่างสุด
+          ไม่มีคอร์ส: แถวสูงเท่าการ์ดตัวกรอง การ์ดหน้าว่างจึงจบตรงกับการ์ดตัวกรองพอดี
+        */}
+      <div className={cn("flex gap-8", hasCourses && "flex-1")}>
+        <aside className="hidden w-60 shrink-0 lg:block">
+          <Card className="sticky top-24 p-5">
+            <CourseFilters />
+          </Card>
+        </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-5">
-        <CourseToolbar total={data.total} />
+        <div className="flex min-w-0 flex-1 flex-col gap-5">
+          <CourseToolbar total={data.total} />
 
-        {data.courses.length > 0 ? (
-          <>
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {data.courses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  compact
-                  viewer={viewer}
-                  inCart={cartCourseIds.has(course.id)}
-                  inWishlist={wishlistCourseIds.has(course.id)}
-                  isOwned={ownedCourseIds.has(course.id)}
-                  isMine={course.instructorId === user?.id}
-                  returnTo={returnTo}
+          {hasCourses ? (
+            <>
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                {data.courses.map((course) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    compact
+                    viewer={viewer}
+                    inCart={cartCourseIds.has(course.id)}
+                    inWishlist={wishlistCourseIds.has(course.id)}
+                    isOwned={ownedCourseIds.has(course.id)}
+                    isMine={course.instructorId === user?.id}
+                    returnTo={returnTo}
+                  />
+                ))}
+              </div>
+
+              <div className="mt-auto">
+                <Pagination
+                  currentPage={data.page}
+                  totalPages={data.totalPages}
+                  getPageHref={buildPageUrl}
+                  ariaLabel="Course pages"
                 />
-              ))}
-            </div>
-
-            <div className="mt-auto">
-              <Pagination
-                currentPage={data.page}
-                totalPages={data.totalPages}
-                getPageHref={buildPageUrl}
-                ariaLabel="Course pages"
-              />
-            </div>
-          </>
-        ) : isFiltered ? (
-          <EmptyState
-            icon={SearchX}
-            title="No courses match"
-            description="Try a different search, or browse a category instead."
-            className="flex-none py-12"
-          >
-            <div className="flex max-w-xl flex-wrap justify-center gap-2">
-              {CATEGORIES.map((category) => (
-                <Link
-                  key={category}
-                  href={`/courses?category=${category}`}
-                  className="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
-                >
-                  {formatEnum(category)}
-                </Link>
-              ))}
-            </div>
-          </EmptyState>
-        ) : (
-          <EmptyState
-            icon={BookOpen}
-            title="No courses yet"
-            description="New courses are on the way — check back soon."
-            className="flex-none py-12"
-          />
-        )}
+              </div>
+            </>
+          ) : isFiltered ? (
+            <EmptyState
+              icon={SearchX}
+              title="No courses match"
+              description="Try a different search, or browse a category instead."
+              className="py-12"
+            >
+              <div className="flex max-w-xl flex-wrap justify-center gap-2">
+                {CATEGORIES.map((category) => (
+                  <Link
+                    key={category}
+                    href={`/courses?category=${category}`}
+                    className="rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
+                  >
+                    {formatEnum(category)}
+                  </Link>
+                ))}
+              </div>
+            </EmptyState>
+          ) : (
+            <EmptyState
+              icon={BookOpen}
+              title="No courses yet"
+              description="New courses are on the way — check back soon."
+              className="py-12"
+            />
+          )}
+        </div>
       </div>
     </div>
   );
