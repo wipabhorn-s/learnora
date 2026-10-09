@@ -171,6 +171,7 @@ export default function DeleteAccountCard({
                   }}
                   placeholder="Enter your password"
                   autoComplete="current-password"
+                  noAutofill
                   aria-invalid={!!error}
                   disabled={isPending}
                 />

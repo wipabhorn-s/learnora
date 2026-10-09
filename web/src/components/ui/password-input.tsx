@@ -12,7 +12,7 @@ import * as React from "react";
 function PasswordInput({
   className,
   ...props
-}: Omit<React.ComponentProps<"input">, "type">) {
+}: Omit<React.ComponentProps<typeof Input>, "type">) {
   const [visible, setVisible] = React.useState(false);
 
   return (

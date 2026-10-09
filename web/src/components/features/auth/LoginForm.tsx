@@ -151,6 +151,7 @@ export default function LoginForm({
                   placeholder="Enter your email"
                   type="email"
                   autoComplete="username"
+                  noAutofill
                   id={field.name}
                   {...field}
                   aria-invalid={fieldState.invalid}
@@ -173,6 +174,7 @@ export default function LoginForm({
                 <PasswordInput
                   placeholder="Enter your password"
                   autoComplete="current-password"
+                  noAutofill
                   id={field.name}
                   {...field}
                   aria-invalid={fieldState.invalid}
