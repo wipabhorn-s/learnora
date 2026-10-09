@@ -1,0 +1,101 @@
+# Render Blueprint: สร้าง API + เว็บ บน Render แบบฟรีในครั้งเดียว
+# Render → New → Blueprint → เลือก repo นี้ → กรอกค่าที่ขึ้นว่า "sync: false"
+# ฐานข้อมูลใช้ Neon (ฟรี) ไม่ได้สร้างที่นี่ ดูขั้นตอนใน README หัวข้อ "Deploy (free)"
+#
+# แพ็กเกจฟรี: ไม่มีคนใช้ 15 นาทีจะหลับ คนแรกที่เข้ามารอปลุกประมาณ 1 นาที
+
+services:
+  # ─────────────────────────── API (NestJS) ───────────────────────────
+  - type: web
+    name: learnora-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: api
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm exec prisma generate && pnpm build
+    # migrate ก่อนเปิดรับคำขอ (แพ็กเกจฟรีไม่มี pre-deploy command)
+    startCommand: pnpm exec prisma migrate deploy && node dist/main
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # ── ค่าที่ต้องกรอกเอง ──
+      - key: DATABASE_URL # Neon: connection string แบบ direct (ไม่ใช่ -pooler) ลงท้าย ?sslmode=require
+        sync: false
+      - key: FRONTEND_URL # URL ของเว็บ เช่น https://learnora-web.onrender.com (ไม่มี / ปิดท้าย)
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM # อีเมลผู้ส่งที่ verify ใน Brevo แล้ว
+        sync: false
+      - key: OMISE_SECRET_KEY # skey_test_... (โหมด test)
+        sync: false
+      - key: OMISE_WEBHOOK_SECRET # จาก Opn Dashboard → Webhooks หลังตั้ง URL แล้ว
+        sync: false
+      # ── ค่าตายตัว ──
+      - key: MAIL_FROM_NAME
+        value: Learnora
+      - key: ACCESS_TOKEN_EXPIRES_IN
+        value: "900"
+      - key: REFRESH_TOKEN_EXPIRES_IN
+        value: "2592000"
+      - key: EMAIL_VERIFICATION_TOKEN_EXPIRES_IN
+        value: "86400"
+      - key: RESET_TOKEN_EXPIRES_IN
+        value: "600"
+      - key: INSTRUCTOR_REVENUE_SHARE_PERCENT
+        value: "70"
+      # Render มี proxy หน้า service 1 ชั้น: req.ip = IP ที่ต่อเข้ามาจริง (ปลอมไม่ได้)
+      - key: TRUST_PROXY
+        value: "1"
+      # ── Render สุ่มให้ (256 บิต base64) ──
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      # ⚠️ คัดลอกไปเก็บสำรองไว้ด้วย หายแล้วอ่านเลขบัญชีผู้สอนที่บันทึกไว้ไม่ออก
+      - key: PAYOUT_ENCRYPTION_KEY
+        generateValue: true
+      - key: INTERNAL_API_SECRET
+        generateValue: true
+
+  # ─────────────────────────── Web (Next.js) ───────────────────────────
+  - type: web
+    name: learnora-web
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: web
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # ── ค่าที่ต้องกรอกเอง ──
+      - key: API_URL # URL ของ API เช่น https://learnora-api.onrender.com
+        sync: false
+      - key: AUTH_URL # URL ของเว็บนี้เอง เช่น https://learnora-web.onrender.com (ต้องมี ไม่งั้นล็อกอินไม่ได้)
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID # ค่าเดียวกับ GOOGLE_CLIENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_OMISE_PUBLIC_KEY # pkey_test_...
+        sync: false
+      # ── Render สุ่มให้ / ดึงจาก API ──
+      - key: AUTH_SECRET
+        generateValue: true
+      # ต้องเป็นค่าเดียวกับของ API: API จะเชื่อ IP ผู้ใช้ที่เว็บส่งไป (rate limit)
+      - key: INTERNAL_API_SECRET
+        fromService:
+          type: web
+          name: learnora-api
+          envVarKey: INTERNAL_API_SECRET

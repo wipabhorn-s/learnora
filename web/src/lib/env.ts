@@ -7,6 +7,15 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: z.string().min(1),
   NEXT_PUBLIC_OMISE_PUBLIC_KEY: z.string().trim().min(1),
+  /**
+   * รหัสลับร่วมกับ API (ค่าเดียวกับ INTERNAL_API_SECRET ของ API) API จะเชื่อ IP ผู้ใช้ที่ส่งไป
+   * ไม่ตั้ง (dev) = ส่ง IP ผ่าน X-Forwarded-For แทน (API เชื่อเพราะอยู่เครื่องเดียวกัน)
+   */
+  INTERNAL_API_SECRET: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || undefined),
 });
 
 const parsed = envSchema.safeParse({
@@ -16,6 +25,7 @@ const parsed = envSchema.safeParse({
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
   NEXT_PUBLIC_OMISE_PUBLIC_KEY: process.env.NEXT_PUBLIC_OMISE_PUBLIC_KEY,
+  INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET,
 });
 
 if (!parsed.success) {

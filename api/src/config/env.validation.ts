@@ -12,6 +12,17 @@ const envSchema = z.object({
    * dev (เว็บกับ API เครื่องเดียวกัน) = loopback, production ใส่ IP/subnet ของ server เว็บ
    */
   TRUST_PROXY: z.string().trim().default('loopback'),
+  /**
+   * รหัสลับร่วมระหว่าง server เว็บกับ API (ตั้งค่าเดียวกันทั้งสองฝั่ง)
+   * มีรหัสนี้ API จึงเชื่อ IP ของผู้ใช้ที่เว็บส่งมา (X-Client-IP) ดู common/utils/client-ip.ts
+   * ไม่ตั้ง (dev) = ใช้ IP ที่ต่อเข้ามา + TRUST_PROXY แทน
+   */
+  INTERNAL_API_SECRET: z
+    .string()
+    .trim()
+    .min(32)
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
   FRONTEND_URL: z.url(),
   DATABASE_URL: z.url(),
   ACCESS_TOKEN_SECRET: z.string().min(32),
