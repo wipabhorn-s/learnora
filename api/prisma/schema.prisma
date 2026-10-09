@@ -398,6 +398,8 @@ model RefundRequest {
 /// บัญชีธนาคารที่ผู้สอนใช้รับเงิน (หนึ่งคนหนึ่งบัญชี) แอดมินใช้ตอนโอนจ่าย
 model PayoutAccount {
   instructorId  String   @id @map("instructor_id") @db.Uuid
+  /// รหัสธนาคารตามที่ Opn รองรับ (เช่น kbank) บัญชีเก่าที่พิมพ์ชื่อเองยังเป็น null
+  bankCode      String?  @map("bank_code") @db.VarChar(10)
   bankName      String   @map("bank_name") @db.VarChar(100)
   accountName   String   @map("account_name") @db.VarChar(100)
   /// เข้ารหัสด้วย AES-256-GCM (PAYOUT_ENCRYPTION_KEY) รูปแบบ "enc:v1:..."

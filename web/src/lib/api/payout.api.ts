@@ -1,6 +1,8 @@
 import { apiFetch } from "@/lib/api/api-fetch";
 
 export type PayoutAccount = {
+  /** รหัสธนาคารตามที่ Opn รองรับ (null = บัญชีเก่าที่พิมพ์ชื่อธนาคารเอง ต้องเลือกใหม่) */
+  bankCode: string | null;
   bankName: string;
   accountName: string;
   accountNumber: string;
@@ -46,10 +48,11 @@ export type AdminPayoutOverview = {
   })[];
 };
 
+/** ส่งแค่รหัสธนาคาร ชื่อธนาคาร API เติมให้เอง */
 export type PayoutAccountInput = Pick<
   PayoutAccount,
-  "bankName" | "accountName" | "accountNumber"
->;
+  "accountName" | "accountNumber"
+> & { bankCode: string };
 
 export const PayoutApi = {
   getEarnings(token: string) {

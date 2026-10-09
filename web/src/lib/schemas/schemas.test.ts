@@ -145,7 +145,7 @@ describe("createCourseSchema", () => {
 
 describe("payoutAccountSchema", () => {
   const valid = {
-    bankName: "Kasikornbank",
+    bankCode: "kbank",
     accountName: "Ann Teacher",
     accountNumber: "123-4-56789-0",
   };
@@ -164,10 +164,16 @@ describe("payoutAccountSchema", () => {
     },
   );
 
-  it("requires a bank name and account holder", () => {
-    expect(
-      firstError(payoutAccountSchema.safeParse({ ...valid, bankName: "  " })),
-    ).toBe("Bank name is required");
+  it.each([undefined, "", "Kasikornbank", "xyz"])(
+    "requires a bank from the Opn list (got %s)",
+    (bankCode) => {
+      expect(
+        firstError(payoutAccountSchema.safeParse({ ...valid, bankCode })),
+      ).toBe("Select your bank");
+    },
+  );
+
+  it("requires an account holder", () => {
     expect(
       firstError(payoutAccountSchema.safeParse({ ...valid, accountName: "" })),
     ).toBe("Account holder name is required");

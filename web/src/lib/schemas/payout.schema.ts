@@ -1,8 +1,9 @@
+import { BANK_CODES } from "@/lib/constants/banks";
 import z from "zod";
 
 /** บัญชีธนาคารรับเงินของผู้สอน (เลขบัญชีตัดขีด/ช่องว่างออกก่อนตรวจ) */
 export const payoutAccountSchema = z.object({
-  bankName: z.string().trim().min(1, "Bank name is required").max(100),
+  bankCode: z.enum(BANK_CODES, { error: "Select your bank" }),
   accountName: z
     .string()
     .trim()

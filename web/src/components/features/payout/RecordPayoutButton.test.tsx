@@ -19,6 +19,7 @@ async function openDialog() {
       instructorName="Ann Teacher"
       available="700.00"
       account={{
+        bankCode: "kbank",
         bankName: "Kasikornbank",
         accountName: "Ann Teacher",
         accountNumber: "1234567890",
