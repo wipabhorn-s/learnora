@@ -154,6 +154,7 @@ export default function LoginSecurityPanel({
                       type="email"
                       placeholder="Enter your new email"
                       autoComplete="off"
+                      noAutofill
                       {...field}
                       aria-invalid={fieldState.invalid}
                     />
@@ -176,6 +177,7 @@ export default function LoginSecurityPanel({
                       id="currentPasswordForEmail"
                       placeholder="Enter your password"
                       autoComplete="current-password"
+                      noAutofill
                       {...field}
                       aria-invalid={fieldState.invalid}
                     />

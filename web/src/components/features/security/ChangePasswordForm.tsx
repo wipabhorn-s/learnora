@@ -100,6 +100,7 @@ export default function ChangePasswordForm() {
                       ? "current-password"
                       : "new-password"
                   }
+                  noAutofill
                   id={field.name}
                   {...field}
                   onChange={(event) => {

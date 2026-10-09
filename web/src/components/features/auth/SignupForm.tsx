@@ -190,6 +190,7 @@ export default function SignupForm({
                   placeholder="Enter your email"
                   type="email"
                   autoComplete="email"
+                  noAutofill
                   id={field.name}
                   {...field}
                   onChange={(event) => {
