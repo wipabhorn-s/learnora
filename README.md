@@ -226,7 +226,8 @@ cd web && pnpm dev              # http://localhost:3000
 | `PORT` | API port (e.g. `8000`) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ACCESS_TOKEN_SECRET` | JWT signing secret, at least 32 characters |
-| `ACCESS_TOKEN_EXPIRES_IN` | Access token lifetime in seconds (e.g. `86400`) |
+| `ACCESS_TOKEN_EXPIRES_IN` | Access token lifetime in seconds — keep it short, e.g. `900` (15 min); the web app renews it with the refresh token |
+| `REFRESH_TOKEN_EXPIRES_IN` | Refresh token lifetime in seconds (default `2592000` = 30 days) — how long someone can stay away before logging in again |
 | `FRONTEND_URL` | Base URL used to build the links sent by email |
 | `RESET_TOKEN_EXPIRES_IN` | Password-reset link lifetime in seconds (e.g. `600`) |
 | `EMAIL_VERIFICATION_TOKEN_EXPIRES_IN` | Verification link lifetime in seconds (e.g. `86400`) |
@@ -237,6 +238,8 @@ cd web && pnpm dev              # http://localhost:3000
 | `OMISE_SECRET_KEY` | Opn Payments secret key (`skey_test_...` / `skey_...`) |
 | `OMISE_WEBHOOK_SECRET` | Webhook signing secret from Opn Dashboard → Webhooks (base64). Optional in development; without it signatures are not checked and a warning is logged in production |
 | `INSTRUCTOR_REVENUE_SHARE_PERCENT` | Instructors' share of each sale, 0–100 (default `70`); the rest is the platform's |
+| `PAYOUT_ENCRYPTION_KEY` | 32 random bytes, base64 — encrypts instructors' bank account numbers (AES-256-GCM). Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Use a different key per environment and **never lose or change it** once accounts are saved |
+| `TRUST_PROXY` | Who may set `X-Forwarded-For` (Express "trust proxy"). Default `loopback` (web and API on one machine). In production set the web server's IP/subnet so rate limits count real users, and outsiders can't spoof their IP |
 
 Env vars are validated with Zod at boot (`src/config/env.validation.ts`) — the API
 refuses to start if anything is missing or malformed.
@@ -247,6 +250,7 @@ refuses to start if anything is missing or malformed.
 | --- | --- |
 | `API_URL` | Base URL of the NestJS API (e.g. `http://localhost:8000`) |
 | `AUTH_SECRET` | NextAuth session encryption secret |
+| `AUTH_URL` | The site's public URL (e.g. `https://learnora.example.com`). **Required in production** — without it (or `AUTH_TRUST_HOST=true` behind a trusted proxy) NextAuth rejects every session with `UntrustedHost` and nobody can log in |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth client credentials |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same client ID, exposed to the browser for the connect-account button |
 | `NEXT_PUBLIC_OMISE_PUBLIC_KEY` | Opn Payments public key (`pkey_test_...`), used by Omise.js to tokenize cards in the browser |
@@ -314,6 +318,8 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | GET | `/auth/profile` | Current user (requires auth) |
 | POST | `/auth/verify-email` | Confirm a signup or an email change |
 | POST | `/auth/resend-verification` | Send the verification link again |
+| POST | `/auth/refresh` | Swap a refresh token for a new access token + refresh token (rotation) |
+| POST | `/auth/logout` | Revoke this device's refresh token |
 | POST | `/auth/forgot-password` | Request a password-reset link |
 | POST | `/auth/reset-password` | Set a new password with a reset token |
 
@@ -323,7 +329,8 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | PATCH | `/users/me` | Update first/last name and instructor bio |
 | PATCH | `/users/me/avatar` | Upload an avatar (multipart) |
 | DELETE | `/users/me/avatar` | Remove the avatar |
-| PATCH | `/users/me/password` | Change password (requires the current one) |
+| PATCH | `/users/me/password` | Change password (requires the current one); logs out other devices and returns a fresh session |
+| POST | `/users/me/sessions/revoke-all` | Log out of all devices |
 | GET | `/users/me/security` | Login methods overview for the settings page |
 | POST | `/users/me/password` | Set a first password (Google-only accounts) |
 | POST | `/users/me/google` | Connect a Google account (verified ID token) |
@@ -404,9 +411,29 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 
 1. `LoginForm` calls the `loginAction` server action.
 2. NextAuth's Credentials provider posts to `POST /auth/login`.
-3. The API verifies the password with bcrypt and signs a JWT access token.
-4. The token is stored in the NextAuth JWT session and attached to every
-   subsequent API call.
+3. The API verifies the password with bcrypt and returns a short-lived JWT
+   access token (15 min) and a refresh token (30 days).
+4. Both are stored in the encrypted, httpOnly NextAuth session cookie. The access
+   token is attached to every API call; the refresh token never leaves the server.
+
+**Refresh tokens** — `src/proxy.ts` (Next.js proxy) runs before each page request:
+when the access token has less than a minute left, it calls `POST /auth/refresh`
+and writes the new tokens into both the request (so the page being rendered
+already uses them) and the response cookie. This can't happen in the NextAuth
+`jwt` callback, because Server Components can't write cookies — the new
+refresh token would be lost and the next request would replay a used one.
+
+- Refresh tokens are random, stored only as sha256 hashes, and **rotated** on
+  every use. All tokens from one login form a *family*.
+- Reusing a token that was already swapped (after a 30-second grace window for
+  parallel requests) is treated as theft: the whole family is revoked and that
+  device has to log in again.
+- Every access token carries the user's `sessionVersion`. Changing or resetting
+  the password, deleting the account, or **Log out of all devices** (Profile →
+  Login & security) bumps it, so older access tokens stop working immediately,
+  not just when they expire. Changing the password keeps the current device
+  logged in with a fresh session.
+- Log out revokes this device's refresh token at the API, not only the cookie.
 
 **Two-factor authentication** — when `twoFactorEnabled` is on, step 3 returns
 `{ codeRequired: true, challengeId }` instead of a token and emails a 6-digit
@@ -414,8 +441,10 @@ code. The web app keeps `challengeId` in an httpOnly cookie
 (`src/lib/login-challenge.ts`) and shows `LoginCodeStep`; `POST /auth/login/code`
 checks the code and only then issues the access token.
 
-**Expired session** — when the API answers 401 for a stored token, the web app
-sends the user to `/session-expired`, which clears the NextAuth session and
+**Expired session** — when the refresh token is no longer valid, the proxy
+clears the session and protected pages redirect to the login page. If the API
+answers 401 for a stored token anyway, the web app sends the user to
+`/session-expired`, which revokes the refresh token, clears the session and
 redirects to the login page.
 
 **Google**
@@ -473,6 +502,28 @@ record the amount and transfer reference — the instructor gets an email. The
 API locks the instructor row while recording, so two admins can't pay out the
 same balance twice. If an admin refunds a sale after it was paid out, the
 instructor's balance goes negative and is taken from the next payout.
+
+**Security hardening**
+
+- **Rate limiting** (`@nestjs/throttler`, per client IP): 120 requests/min by
+  default; endpoints that send email (register, forgot password, resend codes)
+  5/min; password and code checks 10/min; token refresh 30/min. The Opn webhook
+  is exempt. Because the API is only called by the Next.js server, the web app
+  forwards the visitor's IP in `X-Forwarded-For` and the API trusts it only from
+  `TRUST_PROXY`.
+- **Login lockout** (stored in `login_attempts`, hashed keys): 5 wrong passwords
+  from the same email + IP lock that device for 15 minutes, so someone else can't
+  lock you out from their machine; 30 failures across all IPs lock the account.
+- **Uploads**: images (JPG/PNG/WebP/GIF, no SVG) up to 15 MB, lesson videos up to
+  100 MB, checked before the file is read into memory; Cloudinary re-checks image
+  formats.
+- **Bank account numbers** are encrypted at rest (`PAYOUT_ENCRYPTION_KEY`).
+- **Headers**: the web app sends a Content-Security-Policy (only Opn, Google
+  Identity Services and Cloudinary are allowed as external sources — add new
+  services in `src/lib/security-headers.ts`), `X-Frame-Options: DENY`, nosniff,
+  and HSTS in production; the API uses `helmet`.
+- **Tokens in the browser**: `/api/auth/session` strips the API access token, so
+  injected scripts can't read it; server code still gets it through `auth()`.
 
 **Roles vs. capabilities** — `role` only separates regular users from admins.
 Teaching lives in `isInstructor`, checked by `InstructorGuard` and carried in the

@@ -9,7 +9,8 @@ afterEach(() => {
 
 // jsdom ไม่มี matchMedia ตั้งค่าเริ่มต้นว่าไม่ได้ตั้งค่าลดการเคลื่อนไหว
 // (test ที่ต้องการค่าอื่นใช้ vi.stubGlobal ทับได้)
-if (!window.matchMedia) {
+// test บางไฟล์รันใน environment "node" (เช่น proxy.test.ts) ไม่มี window
+if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) =>
     ({
       matches: false,

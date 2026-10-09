@@ -15,8 +15,13 @@ export const UserApi = {
     });
   },
 
+  /** เครื่องอื่นถูก log out หมด เครื่องนี้ได้ token ชุดใหม่กลับมา */
   changePassword(data: ChangePasswordInput, token: string) {
-    return apiFetch<{ message: string }>("/users/me/password", {
+    return apiFetch<{
+      message: string;
+      access_token: string;
+      refresh_token: string;
+    }>("/users/me/password", {
       method: "PATCH",
       body: data,
       token,
@@ -117,6 +122,14 @@ export const UserApi = {
   },
 
   /** acceptTerms: ผู้ใช้ติ๊กยอมรับข้อตกลงผู้สอนแล้ว (API ปฏิเสธถ้าไม่ใช่ true) */
+  /** ออกจากระบบทุกเครื่อง (รวมเครื่องนี้) */
+  logoutAllDevices(token: string) {
+    return apiFetch<{ message: string }>("/users/me/sessions/revoke-all", {
+      method: "POST",
+      token,
+    });
+  },
+
   becomeInstructor(token: string, acceptTerms: boolean) {
     return apiFetch<{ message: string; access_token: string }>(
       "/users/me/instructor",

@@ -8,8 +8,8 @@ import {
   setLoginChallenge,
 } from "@/lib/login-challenge";
 import { loginSchema } from "@/lib/schemas/auth.schema";
+import { SESSION_MAX_AGE, storeTokens } from "@/lib/session-token";
 import NextAuth, { CredentialsSignin } from "next-auth";
-import { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { cookies } from "next/headers";
@@ -49,6 +49,9 @@ function toLoginError(error: unknown, fallback: string): LoginError {
       remaining ? `OTP_INVALID:${remaining}` : "OTP_INVALID",
     );
   }
+  // ยิงคำขอถี่เกิน rate limit ของ API (ไม่เกี่ยวกับรหัสผ่านถูกหรือผิด)
+  if (apiError.statusCode === 429) return new LoginError("TOO_MANY_REQUESTS");
+
   // ล็อกชั่วคราวเพราะใส่รหัสผ่านผิดหลายครั้ง ฝากจำนวนนาทีที่ต้องรอไว้ท้าย code
   if (apiError.code === "TOO_MANY_ATTEMPTS") {
     const minutes = /in (\d+) minute/.exec(apiError.message)?.[1];
@@ -66,31 +69,20 @@ async function authorizeWithCode(code: string) {
   if (!challengeId) throw new LoginError("OTP_SESSION_EXPIRED");
 
   try {
-    const { access_token, user } = await AuthApi.verifyLoginCode(
+    const { access_token, refresh_token, user } = await AuthApi.verifyLoginCode(
       challengeId,
       code,
     );
     await clearLoginChallenge();
-    return { ...user, access_token };
+    return { ...user, access_token, refresh_token };
   } catch (error) {
     throw toLoginError(error, "OTP_INVALID");
   }
 }
 
-function fillToken(token: JWT, user: UserResponse, accessToken: string): JWT {
-  token.sub = user.id;
-  token.firstName = user.firstName;
-  token.lastName = user.lastName;
-  token.email = user.email;
-  token.role = user.role;
-  token.isInstructor = user.isInstructor;
-  token.avatarUrl = user.avatarUrl;
-  token.access_token = accessToken;
-  return token;
-}
-
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
-  session: { strategy: "jwt", maxAge: 86370 },
+  // อายุเท่า refresh token ของ API ระหว่างนี้ proxy.ts ต่ออายุ access token ให้เรื่อย ๆ
+  session: { strategy: "jwt", maxAge: SESSION_MAX_AGE },
   pages: { signIn: "/login", error: "/login" },
 
   providers: [
@@ -120,7 +112,11 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           throw new LoginError("CODE_REQUIRED");
         }
 
-        return { ...result.user, access_token: result.access_token };
+        return {
+          ...result.user,
+          access_token: result.access_token,
+          refresh_token: result.refresh_token,
+        };
       },
     }),
 
@@ -139,14 +135,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         const asInstructor =
           cookieStore.get(INSTRUCTOR_INTENT_COOKIE)?.value === "1";
 
-        const { access_token, user: googleUser } =
-          await AuthApi.loginWithGoogle(account.id_token, asInstructor);
+        const result = await AuthApi.loginWithGoogle(
+          account.id_token,
+          asInstructor,
+        );
 
-        return fillToken(token, googleUser, access_token);
+        return storeTokens(token, result, result.user);
       }
 
       if (user) {
-        fillToken(token, user as unknown as UserResponse, user.access_token);
+        storeTokens(token, user, user as unknown as UserResponse);
       }
 
       if (trigger === "update" && session?.user) {
@@ -166,9 +164,12 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           token.isInstructor = session.user.isInstructor;
         }
 
-        // เปิดสิทธิ์สอนแล้ว API ออก token ใบใหม่มาให้ ต้องเปลี่ยนใบที่ถืออยู่
+        // API ออก token ใบใหม่มาให้ (เปิดสิทธิ์สอน, เปลี่ยนรหัสผ่าน) ต้องเปลี่ยนใบที่ถืออยู่
         if (session.user.access_token) {
-          token.access_token = session.user.access_token;
+          storeTokens(token, {
+            access_token: session.user.access_token,
+            refresh_token: session.user.refresh_token,
+          });
         }
 
         if (session.user.avatarUrl !== undefined) {

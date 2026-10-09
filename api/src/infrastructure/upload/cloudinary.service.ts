@@ -9,6 +9,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { ConfigService } from '@nestjs/config';
 import { EnvVariable } from '@/config/env.validation';
 import { Readable } from 'node:stream';
+import { IMAGE_FORMATS } from '@/common/upload/upload-options';
 
 export type CloudinaryAsset = {
   url: string;
@@ -48,6 +49,8 @@ export class CloudinaryService {
   upload(file: Express.Multer.File): Promise<CloudinaryAsset> {
     return new Promise((resolve, reject) => {
       const writableStream = cloudinary.uploader.upload_stream(
+        // Cloudinary ตรวจไฟล์จริงซ้ำอีกชั้น (ไม่เชื่อ mimetype ที่ผู้ส่งบอกมา)
+        { allowed_formats: IMAGE_FORMATS },
         (error, result) => {
           if (error || !result) {
             this.logger.error(error);

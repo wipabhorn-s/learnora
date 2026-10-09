@@ -56,10 +56,15 @@ export class AuthGuard implements CanActivate {
     // ไม่งั้นแต่ละ endpoint จะตอบ 404 "User not found" กระจัดกระจายไปหมด
     const account = await this.prisma.user.findUnique({
       where: { id: request.user.sub },
-      select: { status: true },
+      select: { status: true, sessionVersion: true },
     });
 
-    if (!account?.status) {
+    // ผู้ใช้ยกเลิกทุก session ไปแล้ว (เปลี่ยนรหัสผ่าน / Log out of all devices)
+    // access token รุ่นก่อนหน้าใช้ไม่ได้ทันที ไม่ต้องรอหมดอายุ
+    if (
+      !account?.status ||
+      (request.user.ver ?? 0) !== account.sessionVersion
+    ) {
       throw new UnauthorizedException({
         message: 'Your session is no longer valid. Please log in again.',
         code: 'SESSION_INVALID',

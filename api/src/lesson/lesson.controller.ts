@@ -17,6 +17,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { VIDEO_UPLOAD } from '@/common/upload/upload-options';
 
 @Instructor()
 @Controller('lessons')
@@ -24,7 +25,7 @@ export class LessonController {
   constructor(private readonly lessonService: LessonService) {}
 
   @Post('/')
-  @UseInterceptors(FileInterceptor('videoUrl'))
+  @UseInterceptors(FileInterceptor('videoUrl', VIDEO_UPLOAD))
   createLesson(
     @CurrentUser('sub') instructorId: string,
     @Body() createLessonDto: CreateLessonDto,
@@ -41,7 +42,7 @@ export class LessonController {
   }
 
   @Patch(':lessonId')
-  @UseInterceptors(FileInterceptor('videoUrl'))
+  @UseInterceptors(FileInterceptor('videoUrl', VIDEO_UPLOAD))
   updateLesson(
     @CurrentUser('sub') instructorId: string,
     @Param('lessonId', ParseIntPipe) lessonId: number,

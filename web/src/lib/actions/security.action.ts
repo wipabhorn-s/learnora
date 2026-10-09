@@ -261,6 +261,21 @@ export async function deleteAccountAction(
   await signOut({ redirectTo: "/account-deleted" });
 }
 
+/** ออกจากระบบทุกเครื่อง (รวมเครื่องนี้) แล้วพาไปหน้า login */
+export async function logoutAllDevicesAction(): Promise<ErrorActionResult | void> {
+  const session = await auth();
+  if (!session) return UNAUTHORIZED;
+
+  try {
+    await UserApi.logoutAllDevices(session.user.access_token);
+  } catch (error) {
+    return toErrorResult(error);
+  }
+
+  // API ยกเลิก refresh token ทุกใบแล้ว เหลือแค่ลบคุกกี้ของเครื่องนี้
+  await signOut({ redirectTo: "/login" });
+}
+
 /** สำเร็จแล้วพาเข้าฝั่งสอนทันที ไม่คืนค่าอะไร (redirect) คืนเฉพาะตอนผิดพลาด */
 export async function becomeInstructorAction(
   acceptTerms: boolean,

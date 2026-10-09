@@ -43,6 +43,7 @@ function setup(
     },
     purchase: { deleteMany: op() },
     payoutAccount: { deleteMany: op() },
+    refreshToken: { deleteMany: op() },
     $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
   const bcrypt = {
@@ -79,6 +80,7 @@ function setup(
     mail as never,
     {} as never,
     otp as never,
+    {} as never,
   );
   return { service, prisma, cloudinary, mail, otp };
 }
@@ -105,6 +107,10 @@ describe('UserService.deleteAccount', () => {
     expect(update.data.deletedAt).toBeInstanceOf(Date);
     expect(prisma.cartItem.deleteMany).toHaveBeenCalled();
     expect(prisma.lessonProgress.deleteMany).toHaveBeenCalled();
+    // ออกจากระบบทุกเครื่อง
+    expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: USER_ID },
+    });
     // เลขบัญชีธนาคารรับเงินของผู้สอนถูกลบด้วย
     expect(prisma.payoutAccount.deleteMany).toHaveBeenCalledWith({
       where: { instructorId: USER_ID },
@@ -259,6 +265,7 @@ describe('UserService.becomeInstructor', () => {
       {} as never,
       {} as never,
       accessToken as never,
+      {} as never,
       {} as never,
     );
     return { service, prisma, accessToken };

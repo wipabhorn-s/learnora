@@ -1,7 +1,7 @@
 import AuthHero from "@/components/features/auth/AuthHero";
 import { AuthRoleProvider } from "@/components/features/auth/AuthRole";
 import SignupForm from "@/components/features/auth/SignupForm";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -134,25 +134,40 @@ describe("Sign up: terms agreement", () => {
     pathname.current = "/signup";
   });
 
-  it("keeps Sign up with Google disabled until the terms are ticked", async () => {
-    const user = userEvent.setup();
+  it("explains under the Google button that continuing means agreeing", () => {
     render(<SignupPage />);
 
     const google = screen.getByRole("button", { name: "Sign up with Google" });
-    expect(google).toBeDisabled();
-
-    await user.click(screen.getByRole("checkbox"));
     expect(google).toBeEnabled();
+    expect(google.closest("form")).toHaveTextContent(
+      "By continuing with Google, you agree to our Terms of Service and Privacy Policy.",
+    );
   });
 
-  it("links to the Terms and Privacy Policy in a new tab", () => {
+  it("puts the agreement checkbox right above Create Account", () => {
     render(<SignupPage />);
 
+    const checkbox = screen.getByRole("checkbox");
+    const submit = screen.getByRole("button", { name: "Create Account" });
+    expect(checkbox.compareDocumentPosition(submit)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(
+      screen
+        .getByRole("textbox", { name: /Email address/ })
+        .compareDocumentPosition(checkbox),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("links to the Terms and Privacy Policy in a new tab from the checkbox", () => {
+    render(<SignupPage />);
+
+    const label = screen.getByRole("checkbox").closest("label")!;
     for (const [name, href] of [
       ["Terms of Service", "/terms"],
       ["Privacy Policy", "/privacy"],
     ]) {
-      const link = screen.getByRole("link", { name });
+      const link = within(label).getByRole("link", { name });
       expect(link).toHaveAttribute("href", href);
       expect(link).toHaveAttribute("target", "_blank");
     }

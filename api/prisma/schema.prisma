@@ -49,6 +49,10 @@ model User {
   /// เปิดแล้ว ล็อกอินด้วยรหัสผ่านต้องใส่รหัส 6 หลักที่ส่งไปทางอีเมลอีกชั้น
   /// (ล็อกอินด้วย Google ไม่ต้อง เพราะ Google ยืนยันตัวตนให้แล้ว)
   twoFactorEnabled          Boolean   @default(false) @map("two_factor_enabled")
+  /// เลขรุ่นของ session: access token ทุกใบพกเลขนี้ไว้ (ver)
+  /// ยกเลิกทุก session (เปลี่ยน/รีเซ็ตรหัสผ่าน, Log out of all devices) = +1
+  /// token ที่ออกก่อนหน้าใช้ไม่ได้ทันที แม้ยังไม่หมดอายุ
+  sessionVersion            Int       @default(0) @map("session_version")
   /// ผู้ใช้ลบบัญชีเอง: ข้อมูลส่วนตัวถูกลบ/แทนที่แล้ว เหลือแถวไว้ผูกกับประวัติการซื้อ
   deletedAt                 DateTime? @map("deleted_at") @db.Timestamptz(2)
   createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(2)
@@ -62,6 +66,7 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
   oneTimeCodes            OneTimeCode[]
+  refreshTokens           RefreshToken[]
   refundRequests          RefundRequest[]          @relation("RefundRequestStudent")
   reviewedRefundRequests  RefundRequest[]          @relation("RefundRequestReviewer")
   payoutAccount           PayoutAccount?
@@ -69,6 +74,42 @@ model User {
   recordedPayouts         Payout[]                 @relation("PayoutRecordedBy")
 
   @@map("users")
+}
+
+/// นับการใส่รหัสผ่านผิด (กันเดารหัสผ่าน) ดู LoginAttemptService
+/// key = sha256 ของ "อีเมล+IP" หรือ "อีเมล" ไม่เก็บอีเมล/IP ตรง ๆ
+/// เก็บในฐานข้อมูล: รีสตาร์ทไม่หาย และทุก instance ของ API นับร่วมกัน
+model LoginAttempt {
+  key         String    @id @db.Char(64)
+  count       Int
+  firstAt     DateTime  @map("first_at") @db.Timestamptz(3)
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  @@index([firstAt])
+  @@map("login_attempts")
+}
+
+/// refresh token: ใช้ขอ access token ใบใหม่โดยไม่ต้องล็อกอินซ้ำ
+/// - เก็บเฉพาะ sha256 ของ token ไม่เก็บตัวจริง
+/// - ใช้แล้วได้ใบใหม่ทุกครั้ง (rotation) ใบใหม่อยู่ family เดียวกับใบเดิม
+/// - ใบที่ใช้ไปแล้วถูกเอามาใช้ซ้ำ = token หลุด → ยกเลิกทั้ง family
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// token ทุกใบที่หมุนต่อกันมาจากการล็อกอินครั้งเดียว (หนึ่งอุปกรณ์/เบราว์เซอร์)
+  familyId  String    @map("family_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(2)
+  /// เวลาที่ถูกใช้ขอใบใหม่ (ละเอียดระดับมิลลิวินาที ใช้เทียบช่วงผ่อนผันตอนหน้าเว็บส่งคำขอพร้อมกัน)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(2)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(2)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
 }
 
 /// ลิงก์ยืนยันอีเมล ใช้ทั้งตอนสมัครและตอนขอเปลี่ยนอีเมล
@@ -359,7 +400,8 @@ model PayoutAccount {
   instructorId  String   @id @map("instructor_id") @db.Uuid
   bankName      String   @map("bank_name") @db.VarChar(100)
   accountName   String   @map("account_name") @db.VarChar(100)
-  accountNumber String   @map("account_number") @db.VarChar(30)
+  /// เข้ารหัสด้วย AES-256-GCM (PAYOUT_ENCRYPTION_KEY) รูปแบบ "enc:v1:..."
+  accountNumber String   @map("account_number") @db.VarChar(255)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(2)
 
   instructor User @relation(fields: [instructorId], references: [id], onDelete: Cascade)

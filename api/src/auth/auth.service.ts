@@ -4,6 +4,7 @@ import { AccessTokenService } from '@/auth/access-token.service';
 import { ForgotPasswordDto } from '@/auth/dto/forgot-password.dto';
 import { GoogleLoginDto } from '@/auth/dto/google-login.dto';
 import { LoginDto } from '@/auth/dto/login.dto';
+import { RefreshTokenDto } from '@/auth/dto/refresh-token.dto';
 import { RegisterDto } from '@/auth/dto/register.dto';
 import { ResendVerificationDto } from '@/auth/dto/resend-verification.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
@@ -14,6 +15,7 @@ import { ResendLoginCodeDto } from '@/auth/dto/resend-login-code.dto';
 import { GoogleAuthService } from '@/auth/google-auth.service';
 import { LoginAttemptService } from '@/auth/login-attempt.service';
 import { OneTimeCodeService } from '@/auth/one-time-code.service';
+import { RefreshTokenService } from '@/auth/refresh-token.service';
 import { ResetTokenService } from '@/auth/reset-token.service';
 import { OtpPurpose, Role } from '@/database/generated/prisma/enums';
 import { MailService } from '@/infrastructure/mail/mail.service';
@@ -55,6 +57,15 @@ function isCoolingDown(lastIssuedAt: Date | null): boolean {
   );
 }
 
+type SessionUser = {
+  id: string;
+  email: string;
+  role: Role;
+  isInstructor: boolean;
+  sessionVersion: number;
+  password?: string | null;
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -69,24 +80,60 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly oneTimeCodeService: OneTimeCodeService,
     private readonly loginAttemptService: LoginAttemptService,
+    private readonly refreshTokenService: RefreshTokenService,
   ) {}
 
-  private async issueSession(user: {
-    id: string;
-    email: string;
-    role: Role;
-    isInstructor: boolean;
-    password?: string | null;
-  }) {
-    const access_token = await this.accessTokenService.sign({
+  private signAccessToken(user: SessionUser) {
+    return this.accessTokenService.sign({
       sub: user.id,
       email: user.email,
       role: user.role,
       isInstructor: user.isInstructor,
+      ver: user.sessionVersion,
     });
+  }
+
+  /** ล็อกอินสำเร็จ: access token อายุสั้น + refresh token ใบแรกของ family ใหม่ */
+  private async issueSession(user: SessionUser) {
+    const [access_token, refresh_token] = await Promise.all([
+      this.signAccessToken(user),
+      this.refreshTokenService.issue(user.id),
+    ]);
 
     const { password: _password, ...rest } = user;
-    return { access_token, user: rest };
+    return { access_token, refresh_token, user: rest };
+  }
+
+  /**
+   * แลก refresh token เป็น access token ใบใหม่ (และ refresh token ใบใหม่)
+   * ดึงข้อมูลผู้ใช้ล่าสุดจากฐานข้อมูลทุกครั้ง สิทธิ์ที่เปลี่ยนไป (เช่นเปิดสิทธิ์สอน)
+   * จึงมาถึงหน้าเว็บเองโดยไม่ต้องล็อกอินใหม่
+   */
+  async refresh(dto: RefreshTokenDto) {
+    const { userId, refreshToken } = await this.refreshTokenService.rotate(
+      dto.refreshToken,
+    );
+
+    const user = await this.userService.findById(userId);
+    if (!user || !user.status || user.deletedAt) {
+      await this.refreshTokenService.revokeAllForUser(userId);
+      throw new UnauthorizedException({
+        message: 'Your session is no longer valid. Please log in again.',
+        code: 'SESSION_INVALID',
+      });
+    }
+
+    return {
+      access_token: await this.signAccessToken(user),
+      refresh_token: refreshToken,
+      user,
+    };
+  }
+
+  /** Log out เครื่องนี้: ยกเลิก refresh token ของ session นี้ */
+  async logout(dto: RefreshTokenDto) {
+    await this.refreshTokenService.revoke(dto.refreshToken);
+    return { message: 'Logged out' };
   }
 
   /**
@@ -122,14 +169,15 @@ export class AuthService {
     );
   }
 
-  async login(dto: LoginDto) {
+  /** ip = IP จริงของผู้ใช้ (ใช้นับการใส่รหัสผิดแยกตามเครื่อง ดู LoginAttemptService) */
+  async login(dto: LoginDto, ip: string) {
     // เช็กก่อนตรวจรหัสผ่าน: ระหว่างล็อกอยู่ใส่ถูกก็ไม่ผ่าน (ไม่งั้นเดาต่อได้)
-    this.loginAttemptService.assertNotLocked(dto.email);
+    await this.loginAttemptService.assertNotLocked(dto.email, ip);
 
     const user = await this.userService.findByEmail(dto.email);
 
     if (!user) {
-      this.loginAttemptService.recordFailure(dto.email);
+      await this.loginAttemptService.recordFailure(dto.email, ip);
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
@@ -149,10 +197,10 @@ export class AuthService {
     );
 
     if (!isMatch) {
-      this.loginAttemptService.recordFailure(dto.email);
+      await this.loginAttemptService.recordFailure(dto.email, ip);
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
-    this.loginAttemptService.reset(dto.email);
+    await this.loginAttemptService.reset(dto.email, ip);
 
     if (!user.status) {
       throw new ForbiddenException({
@@ -350,6 +398,8 @@ export class AuthService {
 
     await this.userService.updatePassword(token.userId, dto.newPassword);
     await this.resetTokenService.markUsed(token.id);
+    // รีเซ็ตรหัสผ่าน = อาจมีคนอื่นรู้รหัสเดิม ออกจากระบบทุกเครื่อง
+    await this.refreshTokenService.revokeAllForUser(token.userId);
 
     // เจ้าของอีเมลกดลิงก์ได้ = พิสูจน์แล้วว่าเข้าถึงกล่องจดหมายนี้จริง
     // บัญชีที่ค้างไม่ยืนยันจึงถือว่ายืนยันไปในตัว ไม่ต้องส่งเมลซ้ำอีกฉบับ

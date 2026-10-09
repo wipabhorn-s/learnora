@@ -1,10 +1,10 @@
+import TextLink from "@/components/shared/TextLink";
 import { Button } from "@/components/ui/button";
 import { loginWithGoogleAction } from "@/lib/actions/auth.action";
 
 export default function GoogleButton({
   label,
   asInstructor = false,
-  disabled = false,
 }: {
   label: string;
   /**
@@ -12,23 +12,15 @@ export default function GoogleButton({
    * Google — server action จะเก็บลงคุกกี้ให้ก่อน redirect
    */
   asInstructor?: boolean;
-  /** หน้าสมัคร: กดไม่ได้จนกว่าจะติ๊กยอมรับข้อตกลง */
-  disabled?: boolean;
 }) {
   return (
-    <form action={loginWithGoogleAction}>
+    <form action={loginWithGoogleAction} className="grid gap-2">
       <input
         type="hidden"
         name="asInstructor"
         value={asInstructor ? "true" : "false"}
       />
-      <Button
-        type="submit"
-        variant="outline"
-        size="lg"
-        className="w-full"
-        disabled={disabled}
-      >
+      <Button type="submit" variant="outline" size="lg" className="w-full">
         <svg className="h-5 w-5" viewBox="0 0 24 24">
           <path
             fill="#4285F4"
@@ -49,6 +41,17 @@ export default function GoogleButton({
         </svg>
         {label}
       </Button>
+
+      {/*
+        ปุ่มเดียวกันนี้สร้างบัญชีใหม่ได้ (ทั้งหน้า Log in และหน้าสมัคร) จึงต้องแจ้งข้อตกลงไว้
+        กดแล้วถือว่ายอมรับ API บันทึกเวลาที่ยอมรับให้บัญชีที่สร้างผ่าน Google
+        มือถือจัดกึ่งกลางตามหัวข้อ จอใหญ่ชิดซ้ายตามฟอร์ม
+      */}
+      <p className="text-center text-xs text-muted-foreground lg:text-left">
+        By continuing with Google, you agree to our{" "}
+        <TextLink href="/terms">Terms of Service</TextLink> and{" "}
+        <TextLink href="/privacy">Privacy Policy</TextLink>.
+      </p>
     </form>
   );
 }
