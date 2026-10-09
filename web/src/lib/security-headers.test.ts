@@ -20,6 +20,10 @@ describe("security headers", () => {
       "https://accounts.google.com/gsi/client",
     );
     expect(directive(csp, "img-src")).toContain("https://res.cloudinary.com");
+    // QR พร้อมเพย์ของ Opn redirect ไปไฟล์บน S3
+    expect(directive(csp, "img-src")).toContain(
+      "https://omise-gateway-production.s3.ap-southeast-1.amazonaws.com",
+    );
     expect(directive(csp, "media-src")).toContain("https://res.cloudinary.com");
     expect(directive(csp, "connect-src")).toContain("https://*.omise.co");
   });

@@ -35,6 +35,9 @@ export function contentSecurityPolicy(isDev: boolean): string {
       "https://res.cloudinary.com",
       "https://images.unsplash.com",
       "https://*.omise.co",
+      // รูป QR พร้อมเพย์: ลิงก์ของ Opn (api.omise.co) redirect ไปไฟล์บน S3 ของ Opn
+      // CSP เช็กปลายทางหลัง redirect ด้วย ไม่ใส่โดเมนนี้รูป QR จะไม่ขึ้น
+      "https://omise-gateway-production.s3.ap-southeast-1.amazonaws.com",
     ],
     "media-src": ["'self'", "blob:", "https://res.cloudinary.com"],
     "font-src": ["'self'", "data:"],
