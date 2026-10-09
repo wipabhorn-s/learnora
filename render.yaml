@@ -12,13 +12,18 @@ services:
     plan: free
     region: singapore
     rootDir: api
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm exec prisma generate && pnpm build
-    # migrate ก่อนเปิดรับคำขอ (แพ็กเกจฟรีไม่มี pre-deploy command)
-    startCommand: pnpm exec prisma migrate deploy && node dist/main
+    # เรียก pnpm ผ่าน corepack (ใช้เวอร์ชันตาม packageManager ใน package.json)
+    # ห้ามใช้ "corepack enable": Render ให้ /usr/bin เป็น read-only แล้ว build พัง
+    buildCommand: corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm exec prisma generate && corepack pnpm build
+    # migrate ก่อนเปิดรับคำขอ (แพ็กเกจฟรีไม่มี pre-deploy command) เรียกโปรแกรมตรงจาก node_modules
+    startCommand: ./node_modules/.bin/prisma migrate deploy && node dist/main
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: "24"
+      # corepack ดาวน์โหลด pnpm ตามเวอร์ชันที่ pin ไว้โดยไม่ถาม (build ไม่มีคนกดยืนยัน)
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        value: "0"
       # ── ค่าที่ต้องกรอกเอง ──
       - key: DATABASE_URL # Neon: connection string แบบ direct (ไม่ใช่ -pooler) ลงท้าย ?sslmode=require
         sync: false
@@ -72,11 +77,15 @@ services:
     plan: free
     region: singapore
     rootDir: web
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
-    startCommand: pnpm start
+    buildCommand: corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm build
+    # next start ใช้ PORT ที่ Render กำหนดให้เอง
+    startCommand: ./node_modules/.bin/next start
     envVars:
       - key: NODE_VERSION
         value: "24"
+      # corepack ดาวน์โหลด pnpm ตามเวอร์ชันที่ pin ไว้โดยไม่ถาม (build ไม่มีคนกดยืนยัน)
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        value: "0"
       # ── ค่าที่ต้องกรอกเอง ──
       - key: API_URL # URL ของ API เช่น https://learnora-api.onrender.com
         sync: false
