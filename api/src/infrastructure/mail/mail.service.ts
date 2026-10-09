@@ -115,6 +115,26 @@ export class MailService {
     );
   }
 
+  /**
+   * มีคนสมัครด้วยอีเมลที่เป็นสมาชิกอยู่แล้ว หน้าสมัครไม่บอกเรื่องนี้ (กันไล่เช็กอีเมล)
+   * จึงแจ้งเจ้าของทางอีเมลแทน พร้อมทางไปต่อ: ล็อกอิน หรือรีเซ็ตรหัสผ่าน
+   */
+  async sendAccountExistsNotice(to: string) {
+    const loginUrl = `${this.frontendUrl}/login`;
+    const forgotUrl = `${this.frontendUrl}/forgot-password`;
+
+    await this.send(
+      to,
+      'คุณมีบัญชี Learnora อยู่แล้ว',
+      this.layout(
+        'คุณมีบัญชีอยู่แล้ว',
+        `<p style="margin:0 0 16px">มีการสมัครสมาชิก Learnora ด้วยอีเมลนี้ แต่อีเมลนี้มีบัญชีอยู่แล้ว เข้าสู่ระบบได้เลย (ถ้าเคยสมัครด้วย Google ให้กด Continue with Google)</p>
+  ${this.button(loginUrl, 'เข้าสู่ระบบ')}
+  <p style="font-size:13px;color:#64748b;margin:0">จำรหัสผ่านไม่ได้? <a href="${forgotUrl}" style="color:#4f46e5">ตั้งรหัสผ่านใหม่</a> · หากคุณไม่ได้เป็นผู้สมัคร กรุณาเพิกเฉยต่ออีเมลฉบับนี้ บัญชีของคุณยังปลอดภัย</p>`,
+      ),
+    );
+  }
+
   async sendEmailChangeVerification(to: string, token: string) {
     const url = this.link('/verify-email', token);
 

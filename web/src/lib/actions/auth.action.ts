@@ -39,18 +39,8 @@ export async function registerAction(
     };
   }
 
-  try {
-    await AuthApi.register(parsed.data);
-  } catch (error) {
-    if (error instanceof ApiError && error.statusCode === 409) {
-      return {
-        success: false,
-        message: "Email already in use",
-        code: "EMAIL_ALREADY_EXISTS",
-      };
-    }
-    throw error;
-  }
+  // อีเมลที่มีบัญชีแล้วก็ตอบสำเร็จ (API ส่งเมลบอกเจ้าของแทน) กันการไล่เช็กว่าอีเมลไหนเป็นสมาชิก
+  await AuthApi.register(parsed.data);
 
   await rememberEmailSent("verify", parsed.data.email);
   redirect("/verify-email/sent");

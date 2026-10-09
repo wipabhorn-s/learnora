@@ -2,7 +2,7 @@ import {
   getOwnedCourseIds,
   type PurchaseResponse,
 } from "@/lib/api/purchase.api";
-import { loginErrorMessage } from "@/lib/login-errors";
+import { LOGIN_ERRORS, loginErrorMessage } from "@/lib/login-errors";
 import { canRequestRefund } from "@/lib/refund";
 import { describe, expect, it } from "vitest";
 
@@ -133,7 +133,13 @@ describe("loginErrorMessage", () => {
 
   it("falls back to the generic message for unknown codes", () => {
     expect(loginErrorMessage("SOMETHING_NEW")).toBe(
-      "Email or password is invalid",
+      LOGIN_ERRORS.INVALID_CREDENTIALS,
+    );
+  });
+
+  it("hints at Google sign-in without saying the account exists", () => {
+    expect(loginErrorMessage("INVALID_CREDENTIALS")).toContain(
+      "Continue with Google",
     );
   });
 });

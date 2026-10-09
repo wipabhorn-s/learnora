@@ -69,10 +69,10 @@ export default function SignupForm({
   const onSubmit = (data: SignupInput) => {
     startTransition(async () => {
       const { confirmPassword, ...input } = data;
+      // อีเมลซ้ำก็ไปหน้า "เช็กอีเมล" เหมือนสมัครใหม่ (API ไม่บอกว่าอีเมลนี้มีบัญชีแล้ว)
+      // ที่กลับมาถึงตรงนี้จึงเหลือแค่ข้อมูลไม่ผ่านการตรวจ
       const result = await registerAction(input);
-      if (result?.code === "EMAIL_ALREADY_EXISTS") {
-        setError("root", { message: result.message });
-      }
+      if (result) setError("root", { message: result.message });
     });
   };
 

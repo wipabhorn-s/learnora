@@ -33,12 +33,11 @@ import {
 } from '@nestjs/common';
 
 /**
- * ข้อความ error ของการล็อกอินตั้งใจแยกให้ชัดตามสาเหตุ เพราะเดิมทุกเคส
- * ถูกกลืนเป็น "Invalid email or password" หมด คนที่โดนระงับบัญชีหรือสมัคร
- * ด้วย Google ไว้จึงไม่มีทางรู้เลยว่าต้องทำอะไรต่อ
+ * ข้อความ error ของการล็อกอินแยกตามสาเหตุเฉพาะหลังรหัสผ่านถูกแล้ว (บัญชีถูกระงับ,
+ * ยังไม่ยืนยันอีเมล) คนที่รู้รหัสผ่านคือเจ้าของ บอกได้ว่าต้องทำอะไรต่อ
  *
- * ส่วนเคสที่บอกไม่ได้จริง ๆ (ไม่มีอีเมลนี้ / รหัสผิด) ยังคงตอบข้อความเดียวกัน
- * เพื่อไม่ให้ใช้หน้าล็อกอินไล่เดาว่าอีเมลไหนมีอยู่ในระบบ
+ * ส่วนก่อนตรวจรหัสผ่าน (ไม่มีอีเมลนี้ / บัญชี Google ที่ไม่มีรหัส / รหัสผิด)
+ * ตอบข้อความเดียวกันหมด เพื่อไม่ให้ใช้หน้าล็อกอินไล่เดาว่าอีเมลไหนมีอยู่ในระบบ
  */
 const INVALID_CREDENTIALS = 'Invalid email or password';
 
@@ -141,6 +140,14 @@ export class AuthService {
    * ผู้ใช้ควรได้บัญชีที่สมัครสำเร็จไว้ก่อน แล้วค่อยกด "ส่งลิงก์อีกครั้ง"
    * ดีกว่าโยน 500 ทิ้งทั้งที่แถวใน users ถูกสร้างไปแล้ว
    */
+  /** hash ไว้เทียบเล่น ๆ ตอนไม่มีรหัสจริงให้เทียบ ให้ล็อกอินพลาดทุกแบบใช้เวลาเท่ากัน */
+  private dummyHash?: Promise<string>;
+
+  private dummyPasswordHash(): Promise<string> {
+    this.dummyHash ??= this.bcryptService.hash('learnora-dummy-password');
+    return this.dummyHash;
+  }
+
   private async sendOrLog(
     action: () => Promise<void>,
     context: string,
@@ -152,20 +159,61 @@ export class AuthService {
     }
   }
 
+  /**
+   * สมัครด้วยอีเมลที่มีบัญชีอยู่แล้ว ตอบเหมือนสมัครสำเร็จทุกอย่าง ไม่บอกว่า "อีเมลนี้มีคนใช้แล้ว"
+   * ไม่งั้นใครก็ไล่เช็กได้ว่าอีเมลไหนเป็นสมาชิก (email enumeration) แล้วเอาไปหลอกต่อ
+   * เจ้าของอีเมลตัวจริงจะได้เมลแทน: ยังไม่ยืนยัน = ลิงก์ยืนยันใหม่, ยืนยันแล้ว = แจ้งว่ามีบัญชีอยู่แล้ว
+   */
   async register(dto: RegisterDto) {
-    // acceptTerms ผ่าน DTO มาแล้ว (ต้องเป็น true) createUser บันทึกเวลาที่ยอมรับให้
-    const user = await this.userService.createUser({
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      password: dto.password,
-      isInstructor: dto.isInstructor ?? false,
-    });
+    let user: { id: string; email: string };
+    try {
+      // acceptTerms ผ่าน DTO มาแล้ว (ต้องเป็น true) createUser บันทึกเวลาที่ยอมรับให้
+      // createUser hash รหัสผ่านก่อนบันทึกเสมอ อีเมลซ้ำจึงใช้เวลาตอบพอ ๆ กับสมัครใหม่
+      user = await this.userService.createUser({
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        password: dto.password,
+        isInstructor: dto.isInstructor ?? false,
+      });
+    } catch (error) {
+      if (!(error instanceof ConflictException)) throw error;
+      await this.notifyExistingAccount(dto.email);
+      return;
+    }
 
     const token = await this.emailVerificationTokenService.issue(user.id);
     await this.sendOrLog(
       () => this.mailService.sendEmailVerification(user.email, token),
       `register ${user.id}`,
+    );
+  }
+
+  /** มีคนสมัครด้วยอีเมลของบัญชีที่มีอยู่แล้ว: บอกเจ้าของทางอีเมลเท่านั้น */
+  private async notifyExistingAccount(email: string) {
+    const existing = await this.userService.findByEmail(email);
+    if (!existing) return;
+
+    if (!existing.emailVerifiedAt) {
+      // น่าจะเป็นเจ้าของที่ลืมกดยืนยัน ส่งลิงก์ใหม่ให้ (เว้นช่วงเหมือนปุ่มส่งซ้ำ)
+      if (
+        isCoolingDown(
+          await this.emailVerificationTokenService.lastIssuedAt(existing.id),
+        )
+      ) {
+        return;
+      }
+      const token = await this.emailVerificationTokenService.issue(existing.id);
+      await this.sendOrLog(
+        () => this.mailService.sendEmailVerification(existing.email, token),
+        `register (unverified) ${existing.id}`,
+      );
+      return;
+    }
+
+    await this.sendOrLog(
+      () => this.mailService.sendAccountExistsNotice(existing.email),
+      `register (exists) ${existing.id}`,
     );
   }
 
@@ -176,27 +224,15 @@ export class AuthService {
 
     const user = await this.userService.findByEmail(dto.email);
 
-    if (!user) {
-      await this.loginAttemptService.recordFailure(dto.email, ip);
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
-    }
-
-    // บัญชีที่สมัครผ่าน Google ยังไม่เคยตั้งรหัสผ่าน จึงเทียบรหัสไม่ได้
-    // ต้องบอกให้ตรงว่าให้เข้าทาง Google แทน ไม่ใช่ปล่อยให้งงว่ารหัสผิด
-    if (!user.password) {
-      throw new UnauthorizedException({
-        message:
-          'This account was created with Google. Continue with Google, or use forgot password to set a password.',
-        code: 'GOOGLE_ONLY_ACCOUNT',
-      });
-    }
-
+    // ไม่มีบัญชี / บัญชี Google ที่ยังไม่ตั้งรหัสผ่าน / รหัสผิด ตอบเหมือนกันหมด
+    // ทั้งข้อความและเวลา (เทียบ bcrypt กับ hash หลอกเสมอ) ไม่งั้นไล่เช็กได้ว่าอีเมลไหนมีบัญชี
+    // หน้าเว็บบอกไว้ในข้อความแล้วว่าสมัครด้วย Google ให้กด Continue with Google
     const isMatch = await this.bcryptService.compare(
       dto.password,
-      user.password,
+      user?.password ?? (await this.dummyPasswordHash()),
     );
 
-    if (!isMatch) {
+    if (!user?.password || !isMatch) {
       await this.loginAttemptService.recordFailure(dto.email, ip);
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
