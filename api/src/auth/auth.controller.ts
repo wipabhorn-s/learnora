@@ -11,6 +11,7 @@ import { ResendVerificationDto } from '@/auth/dto/resend-verification.dto';
 import { VerifyLoginCodeDto } from '@/auth/dto/verify-login-code.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
 import { VerifyEmailDto } from '@/auth/dto/verify-email.dto';
+import { ClientIp } from '@/common/decorator/client-ip.decorator';
 import { CurrentUser } from '@/common/decorator/current-user.decorator';
 import { Protected, Public } from '@/common/decorator/public.decorator';
 import {
@@ -19,7 +20,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Ip,
   Post,
 } from '@nestjs/common';
 import {
@@ -45,7 +45,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @CredentialThrottle()
   @Post('login')
-  async login(@Body() loginDto: LoginDto, @Ip() ip: string) {
+  async login(@Body() loginDto: LoginDto, @ClientIp() ip: string) {
     return this.authService.login(loginDto, ip);
   }
 

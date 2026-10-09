@@ -55,6 +55,13 @@ describe('Learnora API (e2e)', () => {
       .expect(404);
   });
 
+  it('GET /health reports ok when the database is reachable (no login needed)', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/health')
+      .expect(200);
+    expect(response.body).toEqual({ status: 'ok' });
+  });
+
   it('protected routes require a token', () => {
     return request(app.getHttpServer()).get('/cart').expect(401);
   });

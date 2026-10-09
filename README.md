@@ -18,6 +18,7 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 - [API reference](#api-reference)
 - [Authentication flow](#authentication-flow)
 - [Scripts](#scripts)
+- [Deploy (free)](#deploy-free)
 
 ---
 
@@ -103,7 +104,7 @@ learnora/
 ├── api/                        # NestJS REST API
 │   ├── prisma/schema.prisma    # database schema
 │   ├── prisma/migrations/      # versioned schema changes (prisma migrate)
-│   ├── scripts/                # one-off / dev scripts (db:del, videos:protect)
+│   ├── scripts/                # one-off / dev scripts (del, videos:protect)
 │   └── src/
 │       ├── auth/               # login, 2FA codes, register, Google, password reset, guards
 │       ├── user/               # profile, avatar, login & security settings
@@ -237,6 +238,7 @@ cd web && pnpm dev              # http://localhost:3000
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Cloudinary credentials |
 | `OMISE_SECRET_KEY` | Opn Payments secret key (`skey_test_...` / `skey_...`) |
 | `OMISE_WEBHOOK_SECRET` | Webhook signing secret from Opn Dashboard → Webhooks (base64). Optional in development; without it signatures are not checked and a warning is logged in production |
+| `INTERNAL_API_SECRET` | Shared secret with the web app (same value on both). With it, the API trusts the visitor IP the web server sends in `X-Client-IP` for rate limiting; without it (local dev) the API uses the connecting IP + `TRUST_PROXY` |
 | `INSTRUCTOR_REVENUE_SHARE_PERCENT` | Instructors' share of each sale, 0–100 (default `70`); the rest is the platform's |
 | `PAYOUT_ENCRYPTION_KEY` | 32 random bytes, base64 — encrypts instructors' bank account numbers (AES-256-GCM). Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Use a different key per environment and **never lose or change it** once accounts are saved |
 | `TRUST_PROXY` | Who may set `X-Forwarded-For` (Express "trust proxy"). Default `loopback` (web and API on one machine). In production set the web server's IP/subnet so rate limits count real users, and outsiders can't spoof their IP |
@@ -250,6 +252,7 @@ refuses to start if anything is missing or malformed.
 | --- | --- |
 | `API_URL` | Base URL of the NestJS API (e.g. `http://localhost:8000`) |
 | `AUTH_SECRET` | NextAuth session encryption secret |
+| `INTERNAL_API_SECRET` | Same value as the API's — lets the API trust the visitor IP this server forwards. Leave empty in local dev |
 | `AUTH_URL` | The site's public URL (e.g. `https://learnora.example.com`). **Required in production** — without it (or `AUTH_TRUST_HOST=true` behind a trusted proxy) NextAuth rejects every session with `UntrustedHost` and nobody can log in |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth client credentials |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same client ID, exposed to the browser for the connect-account button |
@@ -547,7 +550,7 @@ own. Enabling it returns a fresh access token, since the old one still claims
 | `pnpm exec prisma migrate dev --name <change>` | Create and apply a migration after editing `schema.prisma` |
 | `pnpm exec prisma migrate deploy` | Apply pending migrations (production / fresh databases) |
 | `pnpm exec prisma studio` | Browse the database |
-| `pnpm db:del` | Development only: wipe everything except users, courses and lessons (orders, refunds, payouts, carts, tokens…) |
+| `pnpm del` | Development only: wipe everything except users, courses and lessons (orders, refunds, payouts, carts, tokens…) |
 | `pnpm videos:protect` | One-off: move lesson videos uploaded before signed delivery to Cloudinary's authenticated type (`--dry-run` to preview) |
 
 ### `web/`
@@ -557,3 +560,54 @@ own. Enabling it returns a fresh access token, since the old one still claims
 | `pnpm build` / `pnpm start` | Production build and server |
 | `pnpm lint` | ESLint |
 | `pnpm test` / `pnpm test:watch` | Vitest + Testing Library: card checks, formatting, form schemas, refund rules and key components (no API needed) |
+
+---
+
+## Deploy (free)
+
+Free stack: **Neon** (PostgreSQL) + **Render** (API and web, free web services,
+Singapore region) + the existing Cloudinary, Brevo and Opn (test mode)
+accounts. `render.yaml` at the repo root creates both services in one go.
+
+> Free Render services sleep after 15 minutes without traffic; the first
+> visitor after that waits about a minute. Fine for a demo or portfolio — for
+> real sales use a paid instance. While the API sleeps, the 2-minute payment
+> reconcile job pauses too (the Opn webhook and the pending page still settle
+> payments).
+
+**1. Database (Neon)**
+1. Sign up at neon.tech → create a project in **AWS Asia Pacific (Singapore)**.
+2. Copy the **direct** connection string (not the `-pooler` one) and make sure it
+   ends with `?sslmode=require`. Migrations run automatically on every API start.
+
+**2. Render**
+1. Sign up at render.com with GitHub → **New → Blueprint** → pick this repo.
+2. Render reads `render.yaml` and asks for the values marked `sync: false`.
+   Services are named `learnora-api` and `learnora-web`, so the URLs are usually
+   `https://learnora-api.onrender.com` and `https://learnora-web.onrender.com`
+   (Render adds a suffix if the name is taken — check the dashboard):
+   - API: `DATABASE_URL`, `FRONTEND_URL` (web URL), `GOOGLE_CLIENT_ID`,
+     Cloudinary keys, `BREVO_API_KEY`, `MAIL_FROM`, `OMISE_SECRET_KEY`,
+     `OMISE_WEBHOOK_SECRET` (fill in after step 4; leave a placeholder first)
+   - Web: `API_URL` (API URL), `AUTH_URL` (web URL), Google client ID/secret,
+     `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_OMISE_PUBLIC_KEY`
+   - Secrets (`ACCESS_TOKEN_SECRET`, `PAYOUT_ENCRYPTION_KEY`,
+     `INTERNAL_API_SECRET`, `AUTH_SECRET`) are generated by Render.
+     **Copy `PAYOUT_ENCRYPTION_KEY` somewhere safe** — losing it makes saved
+     bank account numbers unreadable.
+3. If a URL turns out different, update `FRONTEND_URL` / `API_URL` / `AUTH_URL`
+   and redeploy (the web app reads `NEXT_PUBLIC_*` at build time).
+
+**3. Google sign-in** — Google Cloud Console → Credentials → your OAuth client:
+- Authorized JavaScript origins: the web URL
+- Authorized redirect URIs: `<web URL>/api/auth/callback/google`
+
+**4. Opn webhook (test mode)** — Opn Dashboard → Webhooks → add
+`<API URL>/payments/opn/webhook`, then put the signing secret into
+`OMISE_WEBHOOK_SECRET` on the API service.
+
+**5. Check** — open `<API URL>/health` (should say `{"status":"ok"}`), then
+sign up on the web app, verify the email, and buy a course with a test card.
+
+To turn on real payments later: complete Opn's business verification, switch to
+`skey_` / `pkey_` live keys, and add a live-mode webhook.

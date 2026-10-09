@@ -49,7 +49,12 @@ export async function apiFetch<T>(
   }
 
   const ip = clientIp ?? (await currentClientIp());
-  if (ip) {
+  if (ip && env.INTERNAL_API_SECRET) {
+    // production: พิสูจน์ด้วยรหัสลับว่ามาจาก server เว็บของเรา API จึงเชื่อ IP นี้
+    newHeaders.set("X-Client-IP", ip);
+    newHeaders.set("X-Internal-Secret", env.INTERNAL_API_SECRET);
+  } else if (ip) {
+    // dev (เว็บกับ API เครื่องเดียวกัน): API เชื่อ X-Forwarded-For จาก loopback
     newHeaders.set("X-Forwarded-For", ip);
   }
 

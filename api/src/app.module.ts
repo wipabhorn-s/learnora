@@ -25,7 +25,9 @@ import { PaymentModule } from '@/infrastructure/payment/payment.module';
 import { MailModule } from '@/infrastructure/mail/mail.module';
 import { InstructorGuard } from '@/auth/guards/instructor.guard';
 import { DEFAULT_THROTTLE } from '@/common/decorator/throttle.decorator';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ClientIpThrottlerGuard } from '@/common/guards/client-ip-throttler.guard';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -56,9 +58,10 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     PaymentModule,
     MailModule,
   ],
+  controllers: [HealthController],
   providers: [
     // ตัวแรกสุด: คำขอที่เกินโควตาถูกตัดก่อนแตะฐานข้อมูล (AuthGuard query ผู้ใช้ทุกครั้ง)
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: ClientIpThrottlerGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: InstructorGuard },
