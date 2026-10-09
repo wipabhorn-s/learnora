@@ -16,7 +16,7 @@ function visibleWitch() {
   );
   expect(shown.length).toBeLessThanOrEqual(1);
   expect(shown[0]?.className ?? "opacity-100").toContain("opacity-100");
-  return shown[0]?.getAttribute("src") ?? "/witch/front.png";
+  return shown[0]?.getAttribute("src") ?? "/witch/front.webp";
 }
 
 /** รูปซ้อนที่ทึบอยู่ทั้งหมด (รูปปัจจุบัน + รูปเก่าที่ค้างไว้ข้างใต้ระหว่างจาง) */
@@ -59,12 +59,12 @@ describe("WhyChooseSection witch", () => {
 
   it("preloads every frame (front + 2 blink + 6 directions) and starts at the front", () => {
     expect(document.querySelectorAll("img")).toHaveLength(9);
-    expect(visibleWitch()).toBe("/witch/front.png");
+    expect(visibleWitch()).toBe("/witch/front.webp");
   });
 
   it("keeps front.png fully opaque underneath at all times (no flicker)", () => {
     const base = document.querySelector("img[data-witch-base]")!;
-    expect(base.getAttribute("src")).toBe("/witch/front.png");
+    expect(base.getAttribute("src")).toBe("/witch/front.webp");
     hover("Career Growth");
     expect(base.className).not.toContain("opacity-0");
     expect(base.className).not.toContain("transition");
@@ -83,7 +83,7 @@ describe("WhyChooseSection witch", () => {
     ["Learn at Your Speed", "lower-right"],
   ])("looks toward %s (%s) right away", (title, pose) => {
     hover(title);
-    expect(visibleWitch()).toBe(`/witch/${pose}.png`);
+    expect(visibleWitch()).toBe(`/witch/${pose}.webp`);
     expect(fadeMs()).toBe("150ms");
   });
 
@@ -92,10 +92,10 @@ describe("WhyChooseSection witch", () => {
     leave("Career Growth");
 
     wait(599);
-    expect(visibleWitch()).toBe("/witch/right.png");
+    expect(visibleWitch()).toBe("/witch/right.webp");
 
     wait(1);
-    expect(visibleWitch()).toBe("/witch/front.png");
+    expect(visibleWitch()).toBe("/witch/front.webp");
     expect(fadeMs()).toBe("500ms");
   });
 
@@ -104,12 +104,12 @@ describe("WhyChooseSection witch", () => {
     leave("Verified Instructors");
     wait(300);
     hover("Learn at Your Speed");
-    expect(visibleWitch()).toBe("/witch/lower-right.png");
+    expect(visibleWitch()).toBe("/witch/lower-right.webp");
     expect(fadeMs()).toBe("150ms");
 
     // ตัวนับของใบแรกถูกยกเลิกแล้ว ครบเวลาก็ต้องไม่เด้งกลับหน้าตรง
     wait(1000);
-    expect(visibleWitch()).toBe("/witch/lower-right.png");
+    expect(visibleWitch()).toBe("/witch/lower-right.webp");
   });
 
   it("card to card: keeps the old pose opaque underneath while the new one fades in (front never shows through)", () => {
@@ -118,15 +118,15 @@ describe("WhyChooseSection witch", () => {
     hover("Career Growth");
 
     // ระหว่างจาง: รูปใหม่อยู่บน รูปเก่ายังทึบอยู่ข้างใต้
-    expect(visibleWitch()).toBe("/witch/right.png");
+    expect(visibleWitch()).toBe("/witch/right.webp");
     expect(opaque().sort()).toEqual([
-      "/witch/right.png",
-      "/witch/upper-left.png",
+      "/witch/right.webp",
+      "/witch/upper-left.webp",
     ]);
 
     // จางเสร็จ (150ms) ค่อยปล่อยรูปเก่า
     wait(150);
-    expect(opaque()).toEqual(["/witch/right.png"]);
+    expect(opaque()).toEqual(["/witch/right.webp"]);
   });
 
   it("returning to the front lets the pose fade out (nothing kept underneath)", () => {
@@ -139,7 +139,7 @@ describe("WhyChooseSection witch", () => {
   it("stays on a card for as long as it is hovered", () => {
     hover("Learn Anywhere");
     wait(10_000);
-    expect(visibleWitch()).toBe("/witch/lower-left.png");
+    expect(visibleWitch()).toBe("/witch/lower-left.webp");
   });
 
   it("after returning to the front, the next card switch is fast again", () => {
@@ -162,20 +162,20 @@ describe("WhyChooseSection witch", () => {
       fireEvent.click(card("Flexible Access Plans"));
       leave("Flexible Access Plans", "touch");
       wait(5000);
-      expect(visibleWitch()).toBe("/witch/left.png");
+      expect(visibleWitch()).toBe("/witch/left.webp");
     });
 
     it("tapping another card switches to it", () => {
       fireEvent.click(card("Flexible Access Plans"));
       fireEvent.click(card("Learn From Real Work"));
-      expect(visibleWitch()).toBe("/witch/upper-right.png");
+      expect(visibleWitch()).toBe("/witch/upper-right.webp");
     });
 
     it("tapping outside the cards turns her back to the front smoothly", () => {
       fireEvent.click(card("Flexible Access Plans"));
       fireEvent.pointerDown(document.body, { pointerType: "touch" });
       wait(600);
-      expect(visibleWitch()).toBe("/witch/front.png");
+      expect(visibleWitch()).toBe("/witch/front.webp");
       expect(fadeMs()).toBe("500ms");
     });
 
@@ -185,16 +185,16 @@ describe("WhyChooseSection witch", () => {
         pointerType: "touch",
       });
       wait(5000);
-      expect(visibleWitch()).toBe("/witch/left.png");
+      expect(visibleWitch()).toBe("/witch/left.webp");
     });
   });
 
   it("works with the keyboard (focus / blur)", () => {
     fireEvent.focus(card("Learn From Real Work"));
-    expect(visibleWitch()).toBe("/witch/upper-right.png");
+    expect(visibleWitch()).toBe("/witch/upper-right.webp");
 
     fireEvent.blur(card("Learn From Real Work"));
     wait(600);
-    expect(visibleWitch()).toBe("/witch/front.png");
+    expect(visibleWitch()).toBe("/witch/front.webp");
   });
 });

@@ -29,7 +29,7 @@ describe("404 page", () => {
   it("shows the witch as decoration only, bobbing in place (no flying across)", () => {
     const { container } = render(<NotFound />);
     const witch = container.querySelector<HTMLImageElement>(
-      'img[src="/witch/witch-broom-cutout.png"]',
+      'img[src="/witch/witch-broom-cutout.webp"]',
     )!;
 
     // ตกแต่งล้วน: โปรแกรมอ่านหน้าจอข้ามไป
