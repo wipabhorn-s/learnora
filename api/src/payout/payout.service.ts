@@ -7,6 +7,7 @@ import {
 } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
 import { MailService } from '@/infrastructure/mail/mail.service';
+import { bankNameOf } from '@/payout/banks';
 import { RecordPayoutDto } from '@/payout/dto/record-payout.dto';
 import { SavePayoutAccountDto } from '@/payout/dto/save-payout-account.dto';
 import { type SoldItem, summarizeEarnings } from '@/payout/earnings';
@@ -44,6 +45,7 @@ const SOLD_ITEM_SELECT = {
 } satisfies Prisma.PurchaseItemSelect;
 
 const ACCOUNT_SELECT = {
+  bankCode: true,
   bankName: true,
   accountName: true,
   accountNumber: true,
@@ -114,8 +116,10 @@ export class PayoutService {
 
   async savePayoutAccount(instructorId: string, dto: SavePayoutAccountDto) {
     // เลขบัญชีเก็บแบบเข้ารหัส ส่วนชื่อธนาคาร/ชื่อบัญชีไม่ลับเท่า เก็บปกติไว้ค้นหาได้
+    // ชื่อธนาคารเติมจากรายการของเราเอง แอดมินเห็นชื่อสะกดตรงกันทุกบัญชี
     const data = {
       ...dto,
+      bankName: bankNameOf(dto.bankCode),
       accountNumber: encryptField(dto.accountNumber, this.accountKey),
     };
     const account = await this.prisma.payoutAccount.upsert({

@@ -3,6 +3,12 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+} from "@/components/ui/combobox";
+import {
   Field,
   FieldDescription,
   FieldError,
@@ -12,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { savePayoutAccountAction } from "@/lib/actions/payout.action";
 import type { PayoutAccount } from "@/lib/api/payout.api";
+import { type Bank, findBank, THAI_BANKS } from "@/lib/constants/banks";
 import {
   type PayoutAccountFormInput,
   payoutAccountSchema,
@@ -24,7 +31,6 @@ import { useTransition } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 const FIELDS = [
-  { name: "bankName", label: "Bank name", placeholder: "Enter your bank name" },
   {
     name: "accountName",
     label: "Account holder name",
@@ -36,6 +42,14 @@ const FIELDS = [
     placeholder: "Enter your account number",
   },
 ] as const;
+
+/** ค้นได้ทั้งชื่ออังกฤษ ชื่อไทย และรหัสธนาคาร (เช่น "kbank", "กสิกร") */
+const matchesBank = (bank: Bank, query: string) => {
+  const q = query.trim().toLowerCase();
+  return [bank.name, "thaiName" in bank ? bank.thaiName : "", bank.code].some(
+    (text) => text.toLowerCase().includes(q),
+  );
+};
 
 /** บัญชีธนาคารที่ผู้สอนใช้รับเงิน แอดมินโอนเข้าบัญชีนี้ */
 export default function PayoutAccountForm({
@@ -56,7 +70,8 @@ export default function PayoutAccountForm({
   } = useForm<PayoutAccountFormInput>({
     resolver: zodResolver(payoutAccountSchema),
     defaultValues: {
-      bankName: account?.bankName ?? "",
+      // บัญชีเก่าที่พิมพ์ชื่อธนาคารเอง (ไม่มีรหัส) ต้องเลือกธนาคารใหม่จากรายการ
+      bankCode: findBank(account?.bankCode)?.code,
       accountName: account?.accountName ?? "",
       accountNumber: account?.accountNumber ?? "",
     },
@@ -83,6 +98,63 @@ export default function PayoutAccountForm({
               We transfer your earnings to this bank account.
             </FieldDescription>
           </div>
+
+          <Controller
+            control={control}
+            name="bankCode"
+            render={({ field, fieldState }) => (
+              <Field className="gap-1" data-invalid={fieldState.invalid}>
+                <FieldLabel required htmlFor="bankCode">
+                  Bank
+                </FieldLabel>
+                <Combobox
+                  items={THAI_BANKS}
+                  value={findBank(field.value)}
+                  onValueChange={(bank: Bank | null) =>
+                    field.onChange(bank?.code)
+                  }
+                  itemToStringLabel={(bank: Bank) => bank.name}
+                  itemToStringValue={(bank: Bank) => bank.code}
+                  isItemEqualToValue={(bank: Bank, value: Bank) =>
+                    bank.code === value.code
+                  }
+                  filter={matchesBank}
+                  disabled={isPending}
+                >
+                  <ComboboxInput
+                    id="bankCode"
+                    name={field.name}
+                    placeholder="Search for your bank"
+                    onBlur={field.onBlur}
+                    aria-invalid={fieldState.invalid}
+                  />
+                  <ComboboxContent emptyText="No banks match your search.">
+                    {(bank: Bank) => (
+                      <ComboboxItem key={bank.code} value={bank}>
+                        <span className="grid">
+                          <span>{bank.name}</span>
+                          {"thaiName" in bank && (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              {bank.thaiName}
+                            </span>
+                          )}
+                        </span>
+                      </ComboboxItem>
+                    )}
+                  </ComboboxContent>
+                </Combobox>
+                {!account?.bankCode && account?.bankName && (
+                  <FieldDescription>
+                    Previously entered: {account.bankName}. Please pick it from
+                    the list.
+                  </FieldDescription>
+                )}
+                {fieldState.invalid && (
+                  <FieldError errors={[fieldState.error]} />
+                )}
+              </Field>
+            )}
+          />
 
           {FIELDS.map(({ name, label, placeholder }) => (
             <Controller

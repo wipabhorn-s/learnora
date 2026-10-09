@@ -1,13 +1,12 @@
 import { Trim } from '@/common/decorator/trim.decorator';
-import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { BANK_CODES, type BankCode } from '@/payout/banks';
+import { IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 /** บัญชีธนาคารที่ผู้สอนใช้รับเงิน */
 export class SavePayoutAccountDto {
-  @IsString()
-  @Trim()
-  @MinLength(1, { message: 'Enter your bank name' })
-  @MaxLength(100)
-  bankName: string;
+  /** รหัสธนาคารตามที่ Opn รองรับ (เช่น kbank) ชื่อธนาคารระบบเติมให้เอง */
+  @IsIn(BANK_CODES, { message: 'Select your bank' })
+  bankCode: BankCode;
 
   @IsString()
   @Trim()
