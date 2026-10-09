@@ -2,7 +2,9 @@
 
 import { useAuthRole } from "@/components/features/auth/AuthRole";
 import GoogleButton from "@/components/features/auth/GoogleButton";
-import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
+import PasswordChecklist, {
+  PasswordFieldLabel,
+} from "@/components/features/auth/PasswordChecklist";
 import AgreementCheckbox, {
   AgreementLink,
 } from "@/components/shared/AgreementCheckbox";
@@ -187,6 +189,7 @@ export default function SignupForm({
                 <Input
                   placeholder="Enter your email"
                   type="email"
+                  autoComplete="email"
                   id={field.name}
                   {...field}
                   onChange={(event) => {
@@ -209,11 +212,17 @@ export default function SignupForm({
               name="password"
               render={({ field, fieldState }) => (
                 <Field className="gap-1" data-invalid={fieldState.invalid}>
-                  <FieldLabel required htmlFor={field.name}>
+                  <PasswordFieldLabel
+                    required
+                    htmlFor={field.name}
+                    value={field.value}
+                  >
                     Password
-                  </FieldLabel>
+                  </PasswordFieldLabel>
+                  {/* new-password: Chrome ไม่เอารหัสที่บันทึกไว้มาเติม (เสนอรหัสแข็งแรงให้แทน) */}
                   <PasswordInput
                     placeholder="Enter password"
+                    autoComplete="new-password"
                     id={field.name}
                     {...field}
                     onChange={(event) => {
@@ -240,6 +249,7 @@ export default function SignupForm({
                   </FieldLabel>
                   <PasswordInput
                     placeholder="Repeat password"
+                    autoComplete="new-password"
                     id={field.name}
                     {...field}
                     onChange={(event) => {
