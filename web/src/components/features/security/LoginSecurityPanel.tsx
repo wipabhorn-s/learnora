@@ -1,6 +1,8 @@
 "use client";
 
-import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
+import PasswordChecklist, {
+  PasswordFieldLabel,
+} from "@/components/features/auth/PasswordChecklist";
 import ChangePasswordForm from "@/components/features/security/ChangePasswordForm";
 import DeleteAccountCard from "@/components/features/security/DeleteAccountCard";
 import GoogleConnectButton from "@/components/features/security/GoogleConnectButton";
@@ -126,6 +128,18 @@ export default function LoginSecurityPanel({
               ),
             )}
           >
+            {/*
+                ช่อง username ที่มองไม่เห็น: บอก Chrome ว่าบัญชีนี้คืออีเมลปัจจุบัน
+                ไม่งั้น Chrome เข้าใจว่าช่อง "อีเมลใหม่" คือ username แล้วเติมอีเมลเดิมให้เอง
+              */}
+            <input
+              type="email"
+              name="username"
+              autoComplete="username"
+              value={security.email}
+              readOnly
+              hidden
+            />
             <FieldGroup className="gap-3">
               <Controller
                 control={emailForm.control}
@@ -139,6 +153,7 @@ export default function LoginSecurityPanel({
                       id="newEmail"
                       type="email"
                       placeholder="Enter your new email"
+                      autoComplete="off"
                       {...field}
                       aria-invalid={fieldState.invalid}
                     />
@@ -160,6 +175,7 @@ export default function LoginSecurityPanel({
                     <PasswordInput
                       id="currentPasswordForEmail"
                       placeholder="Enter your password"
+                      autoComplete="current-password"
                       {...field}
                       aria-invalid={fieldState.invalid}
                     />
@@ -221,11 +237,16 @@ export default function LoginSecurityPanel({
                 name="newPassword"
                 render={({ field, fieldState }) => (
                   <Field className="gap-1" data-invalid={fieldState.invalid}>
-                    <FieldLabel required htmlFor="newPassword">
+                    <PasswordFieldLabel
+                      required
+                      htmlFor="newPassword"
+                      value={field.value}
+                    >
                       New password
-                    </FieldLabel>
+                    </PasswordFieldLabel>
                     <PasswordInput
                       id="newPassword"
+                      autoComplete="new-password"
                       placeholder="Create a strong password"
                       {...field}
                       onChange={(event) => {
@@ -255,6 +276,7 @@ export default function LoginSecurityPanel({
                     </FieldLabel>
                     <PasswordInput
                       id="confirmNewPassword"
+                      autoComplete="new-password"
                       placeholder="Repeat your password"
                       {...field}
                       onChange={(event) => {

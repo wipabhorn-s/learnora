@@ -1,13 +1,10 @@
 "use client";
 
-import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
+import PasswordChecklist, {
+  PasswordFieldLabel,
+} from "@/components/features/auth/PasswordChecklist";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { resetPasswordAction } from "@/lib/actions/auth.action";
 import {
@@ -44,9 +41,12 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           name="newPassword"
           render={({ field, fieldState }) => (
             <Field className="gap-1" data-invalid={fieldState.invalid}>
-              <FieldLabel htmlFor={field.name}>New password</FieldLabel>
+              <PasswordFieldLabel htmlFor={field.name} value={field.value}>
+                New password
+              </PasswordFieldLabel>
               <PasswordInput
                 placeholder="Create a strong password"
+                autoComplete="new-password"
                 id={field.name}
                 {...field}
                 onChange={(event) => {

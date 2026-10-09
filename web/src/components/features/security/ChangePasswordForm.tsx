@@ -1,6 +1,8 @@
 "use client";
 
-import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
+import PasswordChecklist, {
+  PasswordFieldLabel,
+} from "@/components/features/auth/PasswordChecklist";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -78,11 +80,26 @@ export default function ChangePasswordForm() {
             name={f.name}
             render={({ field, fieldState }) => (
               <Field className="gap-1" data-invalid={fieldState.invalid}>
-                <FieldLabel required htmlFor={field.name}>
-                  {f.label}
-                </FieldLabel>
+                {field.name === "newPassword" ? (
+                  <PasswordFieldLabel
+                    required
+                    htmlFor={field.name}
+                    value={field.value}
+                  >
+                    {f.label}
+                  </PasswordFieldLabel>
+                ) : (
+                  <FieldLabel required htmlFor={field.name}>
+                    {f.label}
+                  </FieldLabel>
+                )}
                 <PasswordInput
                   placeholder={f.placeholder}
+                  autoComplete={
+                    field.name === "currentPassword"
+                      ? "current-password"
+                      : "new-password"
+                  }
                   id={field.name}
                   {...field}
                   onChange={(event) => {
