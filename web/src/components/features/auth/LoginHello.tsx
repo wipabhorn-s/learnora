@@ -26,7 +26,7 @@ export default function LoginHello({
       />
       <div className="animate-witch-float relative size-full">
         <Image
-          src="/witch/login-hello-cutout.png"
+          src="/witch/login-hello-cutout.webp"
           alt="Learnora's witch waving hello"
           fill
           priority={priority}

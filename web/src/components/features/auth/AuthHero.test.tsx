@@ -39,7 +39,7 @@ describe("Sign up: character follows the selected role", () => {
   it("starts as a student", () => {
     render(<SignupPage />);
 
-    expect(shownCharacter()).toBe("/witch/role-student.png");
+    expect(shownCharacter()).toBe("/witch/role-student.webp");
     expect(
       screen.getByRole("heading", {
         name: "Learn new skills, at your own pace",
@@ -58,7 +58,7 @@ describe("Sign up: character follows the selected role", () => {
       screen.getByRole("button", { name: "Register as Instructor" }),
     );
 
-    expect(shownCharacter()).toBe("/witch/role-instructor.png");
+    expect(shownCharacter()).toBe("/witch/role-instructor.webp");
     expect(
       screen.getByRole("heading", {
         name: "Share your knowledge, inspire learners",
@@ -68,7 +68,7 @@ describe("Sign up: character follows the selected role", () => {
 
   it("opens on the instructor character from ?role=INSTRUCTOR", () => {
     render(<SignupPage asInstructor />);
-    expect(shownCharacter()).toBe("/witch/role-instructor.png");
+    expect(shownCharacter()).toBe("/witch/role-instructor.webp");
   });
 
   it("goes back to the student character after leaving the sign-up form", async () => {
@@ -89,10 +89,10 @@ describe("Sign up: character follows the selected role", () => {
     }
 
     render(<AuthPages />);
-    expect(shownCharacter()).toBe("/witch/role-instructor.png");
+    expect(shownCharacter()).toBe("/witch/role-instructor.webp");
 
     await user.click(screen.getByRole("button", { name: "Go to log in" }));
-    expect(shownCharacter()).toBe("/witch/role-student.png");
+    expect(shownCharacter()).toBe("/witch/role-student.webp");
   });
 });
 
@@ -107,7 +107,7 @@ describe("Log in and other auth pages: waving witch", () => {
 
     expect(
       screen.getByRole("img", { name: "Learnora's witch waving hello" }),
-    ).toHaveAttribute("src", "/witch/login-hello-cutout.png");
+    ).toHaveAttribute("src", "/witch/login-hello-cutout.webp");
     expect(
       screen.getByRole("heading", { name: "Welcome back!" }),
     ).toBeInTheDocument();

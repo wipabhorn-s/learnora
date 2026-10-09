@@ -15,12 +15,12 @@ import { usePathname } from "next/navigation";
 const ROLES: Record<AuthRole, { image: string; title: string; desc: string }> =
   {
     student: {
-      image: "/witch/role-student.png",
+      image: "/witch/role-student.webp",
       title: "Learn new skills, at your own pace",
       desc: "Access expert-led courses and continue learning anywhere.",
     },
     instructor: {
-      image: "/witch/role-instructor.png",
+      image: "/witch/role-instructor.webp",
       title: "Share your knowledge, inspire learners",
       desc: "Create courses, reach students everywhere, and earn from what you know.",
     },

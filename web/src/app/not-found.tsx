@@ -37,7 +37,7 @@ export default function NotFound() {
           className="pointer-events-none relative -scale-x-100 w-[clamp(8rem,min(36vw,42dvh),24rem)] shrink-0"
         >
           <Image
-            src="/witch/witch-broom-cutout.png"
+            src="/witch/witch-broom-cutout.webp"
             alt=""
             width={1254}
             height={1254}

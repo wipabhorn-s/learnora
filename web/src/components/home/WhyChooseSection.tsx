@@ -332,7 +332,7 @@ function Witch({
           พื้นหลังมืดด้านหลังจะโผล่ออกมาเป็นวูบ ๆ
         */}
       <Image
-        src="/witch/front.png"
+        src="/witch/front.webp"
         alt="Learnora's witch mascot"
         fill
         loading="eager"
@@ -343,7 +343,7 @@ function Witch({
       {OVERLAY_FRAMES.map((frame) => (
         <Image
           key={frame}
-          src={`/witch/${frame}.png`}
+          src={`/witch/${frame}.webp`}
           alt=""
           aria-hidden
           fill
