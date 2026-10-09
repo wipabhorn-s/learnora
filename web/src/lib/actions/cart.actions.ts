@@ -3,12 +3,16 @@
 import { ApiError } from "@/lib/api/api-error";
 import { CartApi } from "@/lib/api/cart.api";
 import { auth } from "@/lib/auth";
+import { safeLocalPath } from "@/lib/safe-path";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-export async function addToCartAction(courseId: number, redirectTo: string) {
+export async function addToCartAction(courseId: number, returnTo: string) {
   const session = await auth();
   if (!session) redirect("/login");
+
+  // path มาจาก browser ห้ามพาไปเว็บอื่น
+  const redirectTo = safeLocalPath(returnTo, "/courses");
 
   try {
     await CartApi.add(courseId, session.user.access_token);
@@ -58,7 +62,7 @@ export async function removeFromCartAction(
 
   await CartApi.remove(courseId, session.user.access_token);
 
-  revalidatePath(revalidateTo);
+  revalidatePath(safeLocalPath(revalidateTo, "/cart"));
   revalidatePath("/cart");
   revalidatePath("/", "layout");
 }

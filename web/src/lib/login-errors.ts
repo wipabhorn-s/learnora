@@ -1,8 +1,8 @@
 /** ข้อความที่ผู้ใช้เห็นเมื่อล็อกอินไม่ผ่าน แยกตามสาเหตุจริงที่ API ส่งมา */
 export const LOGIN_ERRORS: Record<string, string> = {
-  INVALID_CREDENTIALS: "Email or password is invalid",
-  GOOGLE_ONLY_ACCOUNT:
-    "This account was created with Google. Use Continue with Google, or set a password via Forgot password.",
+  // API ไม่บอกว่าเป็นบัญชี Google (กันไล่เช็กอีเมล) จึงใบ้ไว้ในข้อความเดียวกันเลย
+  INVALID_CREDENTIALS:
+    "Email or password is invalid. If you signed up with Google, use Continue with Google.",
   ACCOUNT_SUSPENDED: "Your account has been suspended. Please contact support.",
   EMAIL_NOT_VERIFIED:
     "Please verify your email first. Check your inbox for the verification link.",
