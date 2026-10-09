@@ -77,8 +77,6 @@ export default function SignupForm({
   // ปุ่ม Google อยู่นอก <form> จึงอ่านค่าจากฟอร์มตรง ๆ ไม่ได้ ต้องติดตามค่าไว้
   // เพื่อส่งเจตนาเดียวกันไปกับทั้งสองทาง (useWatch แทน watch เพราะ memo ได้)
   const asInstructor = useWatch({ control, name: "isInstructor" });
-  // ปุ่ม Google ส่งฟอร์มของตัวเอง ไม่ผ่าน validation ของฟอร์มนี้ จึงปิดไว้จนกว่าจะติ๊ก
-  const acceptedTerms = useWatch({ control, name: "acceptTerms" });
 
   // ให้ตัวละครฝั่งซ้าย (AuthHero) เปลี่ยนตาม role ที่เลือก ออกจากหน้านี้แล้วกลับเป็นนักเรียน
   const { setRole } = useAuthRole();
@@ -106,34 +104,7 @@ export default function SignupForm({
         )}
       />
 
-      {/* ติ๊กครั้งเดียวใช้ได้ทั้งสมัครด้วย Google และด้วยอีเมล */}
-      <Controller
-        control={control}
-        name="acceptTerms"
-        render={({ field, fieldState }) => (
-          <div className="grid gap-1">
-            <AgreementCheckbox
-              checked={field.value}
-              onCheckedChange={(checked) => {
-                field.onChange(checked);
-                clearOnEdit(field.name);
-              }}
-              invalid={fieldState.invalid}
-            >
-              I agree to the{" "}
-              <AgreementLink href="/terms">Terms of Service</AgreementLink> and{" "}
-              <AgreementLink href="/privacy">Privacy Policy</AgreementLink>
-            </AgreementCheckbox>
-            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-          </div>
-        )}
-      />
-
-      <GoogleButton
-        label="Sign up with Google"
-        asInstructor={asInstructor}
-        disabled={!acceptedTerms}
-      />
+      <GoogleButton label="Sign up with Google" asInstructor={asInstructor} />
 
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
         <div className="h-px flex-1 bg-border" />
@@ -284,6 +255,32 @@ export default function SignupForm({
               )}
             />
           </div>
+
+          {/* สมัครด้วยอีเมลต้องติ๊กยอมรับ (สมัครด้วย Google มีข้อความแจ้งใต้ปุ่มแทน) */}
+          <Controller
+            control={control}
+            name="acceptTerms"
+            render={({ field, fieldState }) => (
+              <div className="grid gap-1">
+                <AgreementCheckbox
+                  checked={field.value}
+                  onCheckedChange={(checked) => {
+                    field.onChange(checked);
+                    clearOnEdit(field.name);
+                  }}
+                  invalid={fieldState.invalid}
+                >
+                  I agree to the{" "}
+                  <AgreementLink href="/terms">Terms of Service</AgreementLink>{" "}
+                  and{" "}
+                  <AgreementLink href="/privacy">Privacy Policy</AgreementLink>
+                </AgreementCheckbox>
+                {fieldState.invalid && (
+                  <FieldError errors={[fieldState.error]} />
+                )}
+              </div>
+            )}
+          />
 
           <Button type="submit" disabled={isPending} size="lg">
             {isPending ? "Creating account..." : "Create Account"}

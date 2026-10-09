@@ -26,6 +26,11 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  CredentialThrottle,
+  EmailThrottle,
+} from '@/common/decorator/throttle.decorator';
+import { IMAGE_UPLOAD } from '@/common/upload/upload-options';
 
 @Controller('users')
 export class UserController {
@@ -40,7 +45,7 @@ export class UserController {
   }
 
   @Patch('me/avatar')
-  @UseInterceptors(FileInterceptor('avatarUrl'))
+  @UseInterceptors(FileInterceptor('avatarUrl', IMAGE_UPLOAD))
   updateAvatar(
     @CurrentUser('sub') userId: string,
     @UploadedFile() avatarFile?: Express.Multer.File,
@@ -56,6 +61,14 @@ export class UserController {
     return this.userService.removeAvatar(userId);
   }
 
+  /** ออกจากระบบทุกเครื่อง (รวมเครื่องนี้) */
+  @HttpCode(HttpStatus.OK)
+  @Post('me/sessions/revoke-all')
+  logoutAllDevices(@CurrentUser('sub') userId: string) {
+    return this.userService.logoutAllDevices(userId);
+  }
+
+  @CredentialThrottle()
   @Patch('me/password')
   changePassword(
     @CurrentUser('sub') userId: string,
@@ -100,6 +113,7 @@ export class UserController {
 
   /** ส่งลิงก์ยืนยันไปที่อีเมลใหม่ ยังไม่เปลี่ยนจนกว่าจะกดยืนยัน */
   @HttpCode(HttpStatus.OK)
+  @EmailThrottle()
   @Post('me/email-change')
   changeEmail(
     @CurrentUser('sub') userId: string,
@@ -109,12 +123,14 @@ export class UserController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @EmailThrottle()
   @Post('me/two-factor/request')
   requestEnableTwoFactor(@CurrentUser('sub') userId: string) {
     return this.userService.requestEnableTwoFactor(userId);
   }
 
   @HttpCode(HttpStatus.OK)
+  @CredentialThrottle()
   @Post('me/two-factor/confirm')
   confirmEnableTwoFactor(
     @CurrentUser('sub') userId: string,
@@ -128,6 +144,7 @@ export class UserController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @CredentialThrottle()
   @Post('me/two-factor/disable')
   disableTwoFactor(
     @CurrentUser('sub') userId: string,
@@ -147,6 +164,7 @@ export class UserController {
 
   /** บัญชีที่ไม่มีรหัสผ่าน: ขอรหัสยืนยันการลบบัญชีทางอีเมล */
   @HttpCode(HttpStatus.OK)
+  @EmailThrottle()
   @Post('me/delete/request-code')
   requestDeleteAccountCode(
     @CurrentUser('sub') userId: string,
@@ -157,6 +175,7 @@ export class UserController {
 
   /** ลบบัญชีตัวเอง ใช้ POST เพราะต้องส่งรหัสผ่าน/รหัสยืนยันใน body (DELETE ไม่ควรมี body) */
   @HttpCode(HttpStatus.OK)
+  @CredentialThrottle()
   @Post('me/delete')
   deleteAccount(
     @CurrentUser('sub') userId: string,

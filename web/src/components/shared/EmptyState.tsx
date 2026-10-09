@@ -30,11 +30,15 @@ export default function EmptyState({
   children,
   className,
 }: {
-  icon: LucideIcon;
+  /** ไม่ใส่ก็ได้ (หน้าที่เนื้อหาเยอะอยู่แล้ว เช่นหน้า Start Teaching) */
+  icon?: LucideIcon;
   title: string;
   description?: string;
   action?: EmptyStateAction;
-  /** ปุ่มที่ไม่ใช่ลิงก์ เช่นปุ่มที่เรียก server action วางแทน action ได้ */
+  /**
+   * ปุ่มที่ไม่ใช่ลิงก์ เช่นปุ่มที่เรียก server action วางแทน action ได้
+   * กว้างเท่าคำอธิบายด้านบนพอดี (เนื้อหาเป็นกล่อง/ฟอร์มจะได้แนวเดียวกับข้อความ)
+   */
   children?: React.ReactNode;
   className?: string;
 }) {
@@ -47,15 +51,21 @@ export default function EmptyState({
         className,
       )}
     >
-      <div className="mb-6 flex size-28 items-center justify-center rounded-full bg-secondary">
-        <Icon size={60} className="text-primary/70" />
-      </div>
+      {Icon && (
+        <div className="mb-6 flex size-28 items-center justify-center rounded-full bg-secondary">
+          <Icon size={60} className="text-primary/70" />
+        </div>
+      )}
 
       <h2 className="text-2xl font-extrabold">{title}</h2>
 
-      {description && (
-        <p className="mt-3 text-base text-muted-foreground">{description}</p>
-      )}
+      {/* w-fit: กว้างเท่าข้อความที่ยาวที่สุด children ข้างในยืดตามความกว้างนี้ */}
+      <div className="w-fit max-w-full">
+        {description && (
+          <p className="mt-3 text-base text-muted-foreground">{description}</p>
+        )}
+        {children && <div className="mt-8">{children}</div>}
+      </div>
 
       {action && (
         <Link
@@ -68,8 +78,6 @@ export default function EmptyState({
           {action.label}
         </Link>
       )}
-
-      {children && <div className="mt-8">{children}</div>}
     </Card>
   );
 }

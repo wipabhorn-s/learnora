@@ -26,6 +26,23 @@ export const AuthApi = {
     });
   },
 
+  /** แลก refresh token เป็น access token ใบใหม่ (refresh token ก็ได้ใบใหม่ด้วย) */
+  refresh(refreshToken: string, clientIp?: string) {
+    return apiFetch<LoginResponse>("/auth/refresh", {
+      method: "POST",
+      body: { refreshToken },
+      clientIp,
+    });
+  },
+
+  /** Log out เครื่องนี้: ยกเลิก refresh token ที่ API */
+  logout(refreshToken: string) {
+    return apiFetch<{ message: string }>("/auth/logout", {
+      method: "POST",
+      body: { refreshToken },
+    });
+  },
+
   verifyLoginCode(challengeId: string, code: string) {
     return apiFetch<LoginResponse>("/auth/login/code", {
       method: "POST",

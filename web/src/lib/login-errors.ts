@@ -14,6 +14,8 @@ export const LOGIN_ERRORS: Record<string, string> = {
   OTP_EXPIRED: "This code has expired. Request a new one.",
   OTP_LOCKED: "Too many incorrect attempts. Request a new code.",
   OTP_SESSION_EXPIRED: "Your login session has expired. Please log in again.",
+  TOO_MANY_REQUESTS:
+    "Too many requests from your network. Please wait a minute and try again.",
   TOO_MANY_ATTEMPTS:
     "Too many failed attempts. Please wait a few minutes, or reset your password.",
 };

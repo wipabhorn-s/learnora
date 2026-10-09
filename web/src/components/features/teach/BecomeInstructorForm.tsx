@@ -39,7 +39,7 @@ export default function BecomeInstructorForm() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto grid max-w-xl gap-6 text-left">
+    <form onSubmit={onSubmit} className="grid gap-6 text-left">
       <ul className="grid gap-3 rounded-2xl border bg-muted/40 p-5 text-sm">
         {KEY_TERMS.map((term) => (
           <li key={term} className="flex gap-3">

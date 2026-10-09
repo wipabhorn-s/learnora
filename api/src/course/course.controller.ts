@@ -20,6 +20,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { IMAGE_UPLOAD } from '@/common/upload/upload-options';
 
 @Instructor()
 @Controller('courses')
@@ -52,7 +53,7 @@ export class CourseController {
   }
 
   @Post('/')
-  @UseInterceptors(FileInterceptor('thumbnailUrl'))
+  @UseInterceptors(FileInterceptor('thumbnailUrl', IMAGE_UPLOAD))
   createCourse(
     @CurrentUser('sub') instructorId: string,
     @Body() createCourseDto: CreateCourseDto,
@@ -66,7 +67,7 @@ export class CourseController {
   }
 
   @Patch(':courseId')
-  @UseInterceptors(FileInterceptor('thumbnailUrl'))
+  @UseInterceptors(FileInterceptor('thumbnailUrl', IMAGE_UPLOAD))
   updateCourse(
     @CurrentUser('sub') instructorId: string,
     @Param('courseId', ParseIntPipe) courseId: number,

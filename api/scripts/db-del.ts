@@ -4,7 +4,7 @@
  *
  * รัน:  pnpm db:del
  *
- * ลบ: token/โค้ดยืนยันทั้งหมด, wishlist, ตะกร้า, คำสั่งซื้อ, ความคืบหน้าการเรียน, คำขอคืนเงิน,
+ * ลบ: token/โค้ดยืนยันทั้งหมด (รวม refresh token = ทุกคนต้องล็อกอินใหม่), wishlist, ตะกร้า, คำสั่งซื้อ, ความคืบหน้าการเรียน, คำขอคืนเงิน,
  *     การจ่ายเงินผู้สอนและบัญชีรับเงิน
  * id ของตารางที่ลบเริ่มนับ 1 ใหม่ (RESTART IDENTITY)
  * ไม่ใช้ CASCADE: ถ้าวันหน้ามีตารางที่เก็บไว้อ้างถึงตารางพวกนี้ คำสั่งจะ error แทนการลบตารางนั้นเงียบ ๆ
@@ -18,6 +18,8 @@ const TABLES = [
   'email_verification_tokens',
   'password_reset_tokens',
   'one_time_codes',
+  'refresh_tokens',
+  'login_attempts',
   'wishlists',
   'cart_items',
   'purchases',

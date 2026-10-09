@@ -4,3 +4,7 @@ allowBuilds:
   esbuild: true
   prisma: true
   unrs-resolver: true
+
+# บังคับเวอร์ชันที่แก้ช่องโหว่แล้ว (มากับ Prisma CLI ซึ่งล็อกเวอร์ชันเก่าไว้ / ไม่ได้ใช้ MySQL จริง)
+overrides:
+  mysql2: ^3.23.1

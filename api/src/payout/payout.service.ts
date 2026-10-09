@@ -17,6 +17,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  decryptField,
+  encryptField,
+  parseEncryptionKey,
+} from '@/common/utils/field-encryption';
 
 type Tx = Prisma.TransactionClient;
 
@@ -65,6 +70,8 @@ const money = (value: Prisma.Decimal) => value.toFixed(2);
 export class PayoutService {
   private readonly logger = new Logger(PayoutService.name);
   private readonly sharePercent: number;
+  /** กุญแจเข้ารหัสเลขบัญชีธนาคาร (PAYOUT_ENCRYPTION_KEY) */
+  private readonly accountKey: Buffer;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -74,6 +81,9 @@ export class PayoutService {
     this.sharePercent = configService.get('INSTRUCTOR_REVENUE_SHARE_PERCENT', {
       infer: true,
     });
+    this.accountKey = parseEncryptionKey(
+      configService.get('PAYOUT_ENCRYPTION_KEY', { infer: true }),
+    );
   }
 
   /** หน้า Earnings ของผู้สอน: ยอดสรุป บัญชีรับเงิน และประวัติการจ่าย */
@@ -94,7 +104,7 @@ export class PayoutService {
     return {
       sharePercent: this.sharePercent,
       ...this.formatSummary(summary),
-      account,
+      account: this.readAccount(account),
       payouts: payouts.map((payout) => ({
         ...payout,
         amount: money(payout.amount),
@@ -103,14 +113,22 @@ export class PayoutService {
   }
 
   async savePayoutAccount(instructorId: string, dto: SavePayoutAccountDto) {
+    // เลขบัญชีเก็บแบบเข้ารหัส ส่วนชื่อธนาคาร/ชื่อบัญชีไม่ลับเท่า เก็บปกติไว้ค้นหาได้
+    const data = {
+      ...dto,
+      accountNumber: encryptField(dto.accountNumber, this.accountKey),
+    };
     const account = await this.prisma.payoutAccount.upsert({
       where: { instructorId },
-      create: { instructorId, ...dto },
-      update: dto,
+      create: { instructorId, ...data },
+      update: data,
       select: ACCOUNT_SELECT,
     });
 
-    return { message: 'Payout account saved', account };
+    return {
+      message: 'Payout account saved',
+      account: this.readAccount(account),
+    };
   }
 
   /**
@@ -182,7 +200,7 @@ export class PayoutService {
         firstName: instructor.firstName,
         lastName: instructor.lastName,
         email: instructor.email,
-        account: instructor.payoutAccount,
+        account: this.readAccount(instructor.payoutAccount),
         ...this.formatSummary(summary),
       })),
       recentPayouts: recentPayouts.map((payout) => ({
@@ -276,6 +294,18 @@ export class PayoutService {
       paid._sum.amount ?? new Prisma.Decimal(0),
       this.sharePercent,
     );
+  }
+
+  /** ถอดรหัสเลขบัญชีก่อนส่งให้เจ้าของบัญชีหรือแอดมิน (ต้องใช้โอนเงิน) */
+  private readAccount<T extends { accountNumber: string }>(
+    account: T | null,
+  ): T | null {
+    return account
+      ? {
+          ...account,
+          accountNumber: decryptField(account.accountNumber, this.accountKey),
+        }
+      : null;
   }
 
   private formatSummary(summary: ReturnType<typeof summarizeEarnings>) {

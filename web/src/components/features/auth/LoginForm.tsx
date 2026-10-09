@@ -100,15 +100,7 @@ export default function LoginForm({
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-2">
-        <GoogleButton label="Continue with Google" />
-        {/* บัญชีใหม่ที่มาทาง Google ถูกสร้างตรงนี้ได้เลย จึงต้องแจ้งข้อตกลงไว้ (API บันทึกเวลาที่ยอมรับ) */}
-        <p className="text-center text-xs text-muted-foreground lg:text-left">
-          New here? Continuing with Google creates an account and means you
-          agree to our <TextLink href="/terms">Terms</TextLink> and{" "}
-          <TextLink href="/privacy">Privacy Policy</TextLink>.
-        </p>
-      </div>
+      <GoogleButton label="Continue with Google" />
 
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
         <div className="h-px flex-1 bg-border" />

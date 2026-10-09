@@ -4,6 +4,7 @@ import PasswordChecklist from "@/components/features/auth/PasswordChecklist";
 import ChangePasswordForm from "@/components/features/security/ChangePasswordForm";
 import DeleteAccountCard from "@/components/features/security/DeleteAccountCard";
 import GoogleConnectButton from "@/components/features/security/GoogleConnectButton";
+import SessionsCard from "@/components/features/security/SessionsCard";
 import TwoFactorCard from "@/components/features/security/TwoFactorCard";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -332,6 +333,9 @@ export default function LoginSecurityPanel({
 
       {/* --- ยืนยันตัวตน 2 ขั้นตอน --- */}
       <TwoFactorCard security={security} />
+
+      {/* --- ออกจากระบบทุกเครื่อง --- */}
+      <SessionsCard />
 
       {/* --- ลบบัญชี (สิทธิ์ตาม PDPA) --- */}
       {canDeleteAccount && <DeleteAccountCard security={security} />}

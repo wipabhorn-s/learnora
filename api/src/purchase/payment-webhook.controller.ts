@@ -13,6 +13,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { SkipThrottle } from '@nestjs/throttler';
 
 type OpnEvent = { key?: string; data?: { object?: string; id?: string } };
 
@@ -21,6 +22,8 @@ type OpnEvent = { key?: string; data?: { object?: string; id?: string } };
  * ต้องเข้าถึงได้โดยไม่ล็อกอิน จึงตรวจลายเซ็นแทน แล้วถามสถานะจริงจาก Opn อีกชั้น
  */
 @Public()
+// Opn ส่ง webhook ซ้ำได้เมื่อเราตอบช้า/ล้มเหลว และทุกคำขอมาจาก IP ของ Opn ไม่จำกัด
+@SkipThrottle()
 @Controller('payments/opn')
 export class PaymentWebhookController {
   constructor(

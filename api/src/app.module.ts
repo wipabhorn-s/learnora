@@ -24,12 +24,19 @@ import { UploadModule } from '@/infrastructure/upload/upload.module';
 import { PaymentModule } from '@/infrastructure/payment/payment.module';
 import { MailModule } from '@/infrastructure/mail/mail.module';
 import { InstructorGuard } from '@/auth/guards/instructor.guard';
+import { DEFAULT_THROTTLE } from '@/common/decorator/throttle.decorator';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       validate,
+    }),
+    // จำกัดคำขอต่อ IP ทุก endpoint (endpoint ที่อ่อนไหวเข้มกว่า ดู throttle.decorator.ts)
+    ThrottlerModule.forRoot({
+      throttlers: [DEFAULT_THROTTLE],
+      errorMessage: 'Too many requests. Please wait a minute and try again.',
     }),
     DatabaseModule,
     AuthModule,
@@ -50,6 +57,8 @@ import { InstructorGuard } from '@/auth/guards/instructor.guard';
     MailModule,
   ],
   providers: [
+    // ตัวแรกสุด: คำขอที่เกินโควตาถูกตัดก่อนแตะฐานข้อมูล (AuthGuard query ผู้ใช้ทุกครั้ง)
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: InstructorGuard },

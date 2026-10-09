@@ -64,7 +64,12 @@ export async function changePasswordAction(
   }
 
   try {
-    await UserApi.changePassword(parsed.data, session.user.access_token);
+    // API log out เครื่องอื่นทั้งหมด แล้วออก token ชุดใหม่ให้เครื่องนี้ ต้องเก็บแทนชุดเดิม
+    const { access_token, refresh_token } = await UserApi.changePassword(
+      parsed.data,
+      session.user.access_token,
+    );
+    await unstable_update({ user: { access_token, refresh_token } });
   } catch (error) {
     if (error instanceof ApiError) {
       if (error.statusCode === 401) {

@@ -11,7 +11,9 @@ export type UserResponse = {
 };
 
 export type LoginResponse = {
+  /** อายุสั้น (ประมาณ 15 นาที) proxy.ts ต่ออายุให้เองด้วย refresh_token */
   access_token: string;
+  refresh_token: string;
   user: UserResponse;
 };
 

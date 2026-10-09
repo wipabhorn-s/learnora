@@ -76,6 +76,26 @@ describe('Learnora API (e2e)', () => {
     );
   });
 
+  it('POST /auth/refresh rejects an unknown refresh token', () => {
+    return request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: 'not-a-real-token' })
+      .expect(401);
+  });
+
+  it('POST /auth/logout succeeds even for an unknown token (nothing to revoke)', () => {
+    return request(app.getHttpServer())
+      .post('/auth/logout')
+      .send({ refreshToken: 'not-a-real-token' })
+      .expect(200);
+  });
+
+  it('POST /users/me/sessions/revoke-all requires a token', () => {
+    return request(app.getHttpServer())
+      .post('/users/me/sessions/revoke-all')
+      .expect(401);
+  });
+
   it.each([
     ['get', '/instructor/earnings'],
     ['put', '/instructor/earnings/account'],

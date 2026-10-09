@@ -1,37 +1,55 @@
+import { PrismaService } from '@/database/prisma.service';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import * as crypto from 'node:crypto';
 
-/** ใส่รหัสผ่านผิดได้กี่ครั้งภายในช่วงเวลา ก่อนล็อกอีเมลนั้นชั่วคราว */
+/** ใส่รหัสผ่านผิดจากเครื่องเดียว (อีเมล + IP เดียวกัน) ได้กี่ครั้ง ก่อนล็อกเครื่องนั้น */
 export const MAX_FAILED_LOGINS = 5;
+/**
+ * ใส่ผิดรวมทุก IP ได้กี่ครั้ง ก่อนล็อกทั้งบัญชี
+ * กันการเดารหัสแบบกระจายหลายเครื่อง ตั้งสูงไว้ คนนอกจะล็อกบัญชีคนอื่นได้ยาก
+ */
+export const MAX_FAILED_LOGINS_PER_ACCOUNT = 30;
 const WINDOW_MS = 15 * 60 * 1000;
 const LOCK_MS = 15 * 60 * 1000;
 
-type Attempts = { count: number; firstAt: number; lockedUntil: number };
+const sha256 = (value: string) =>
+  crypto.createHash('sha256').update(value).digest('hex');
 
 /**
- * กันเดารหัสผ่าน: ผิดครบ MAX_FAILED_LOGINS ครั้งใน 15 นาที อีเมลนั้นล็อก 15 นาที
+ * กันเดารหัสผ่าน นับ 2 ชั้นใน 15 นาที:
+ * - อีเมล + IP: ผิดครบ MAX_FAILED_LOGINS ครั้ง ล็อกเฉพาะ IP นั้นกับอีเมลนั้น 15 นาที
+ *   คนอื่นจึงพิมพ์รหัสผิดใส่อีเมลเราเพื่อล็อกเราไม่ได้ (เราอยู่คนละ IP)
+ * - อีเมลอย่างเดียว: ผิดรวมครบ MAX_FAILED_LOGINS_PER_ACCOUNT ครั้งจากทุก IP ล็อกทั้งบัญชี
  *
- * นับตามอีเมล ไม่ใช่ IP เพราะเว็บเรียก API จากเซิร์ฟเวอร์ Next.js
- * ทุกคำขอจึงมาจาก IP เดียวกัน ถ้านับตาม IP ผู้ใช้ทุกคนจะโดนล็อกพร้อมกัน
+ * IP คือ IP จริงของผู้ใช้ที่เว็บส่งต่อมา (X-Forwarded-For + TRUST_PROXY ใน main.ts)
  * อีเมลที่ไม่มีในระบบก็นับ คนนอกจะแยกไม่ออกว่าบัญชีไหนมีอยู่จริง
- *
- * เก็บในหน่วยความจำ: รีสตาร์ทแล้วเริ่มนับใหม่ และถ้ารันหลาย instance
- * แต่ละตัวนับแยกกัน (ยังจำกัดได้ แค่หลวมขึ้นตามจำนวน instance)
- * ถ้าขยายเป็นหลาย instance ควรย้ายไปเก็บใน Redis
+ * เก็บในฐานข้อมูล (hash ของอีเมล/IP) รีสตาร์ทไม่หาย และทุก instance นับร่วมกัน
  */
 @Injectable()
 export class LoginAttemptService {
-  private readonly attempts = new Map<string, Attempts>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  private key(email: string) {
-    return email.trim().toLowerCase();
+  private keys(email: string, ip: string) {
+    const normalized = email.trim().toLowerCase();
+    return {
+      device: sha256(`device:${normalized}|${ip}`),
+      account: sha256(`account:${normalized}`),
+    };
   }
 
-  /** ถูกล็อกอยู่ = throw 429 พร้อมบอกว่ารออีกกี่นาที */
-  assertNotLocked(email: string, now = Date.now()) {
-    const entry = this.attempts.get(this.key(email));
-    if (!entry || entry.lockedUntil <= now) return;
+  /** ถูกล็อกอยู่ (ชั้นใดชั้นหนึ่ง) = throw 429 พร้อมบอกว่ารออีกกี่นาที */
+  async assertNotLocked(email: string, ip: string, now = new Date()) {
+    const { device, account } = this.keys(email, ip);
+    const rows = await this.prisma.loginAttempt.findMany({
+      where: { key: { in: [device, account] }, lockedUntil: { gt: now } },
+      select: { lockedUntil: true },
+    });
+    if (rows.length === 0) return;
 
-    const minutes = Math.ceil((entry.lockedUntil - now) / 60_000);
+    const lockedUntil = Math.max(
+      ...rows.map((row) => row.lockedUntil!.getTime()),
+    );
+    const minutes = Math.ceil((lockedUntil - now.getTime()) / 60_000);
     throw new HttpException(
       {
         message: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or reset your password.`,
@@ -41,35 +59,51 @@ export class LoginAttemptService {
     );
   }
 
-  recordFailure(email: string, now = Date.now()) {
-    this.prune(now);
-    const key = this.key(email);
-    const entry = this.attempts.get(key);
+  async recordFailure(email: string, ip: string, now = new Date()) {
+    const { device, account } = this.keys(email, ip);
+    await Promise.all([
+      this.bump(device, MAX_FAILED_LOGINS, now),
+      this.bump(account, MAX_FAILED_LOGINS_PER_ACCOUNT, now),
+    ]);
 
-    // ไม่เคยผิด หรือผิดครั้งแรกนานเกินช่วงเวลาแล้ว เริ่มนับใหม่
-    if (!entry || now - entry.firstAt > WINDOW_MS) {
-      this.attempts.set(key, { count: 1, firstAt: now, lockedUntil: 0 });
-      return;
-    }
-
-    entry.count += 1;
-    if (entry.count >= MAX_FAILED_LOGINS) {
-      entry.lockedUntil = now + LOCK_MS;
-    }
+    // เก็บกวาดแถวที่หมดอายุแล้ว ตารางจะได้ไม่โตเรื่อย ๆ
+    await this.prisma.loginAttempt.deleteMany({
+      where: {
+        firstAt: { lt: new Date(now.getTime() - WINDOW_MS) },
+        OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }],
+      },
+    });
   }
 
-  /** ล็อกอินสำเร็จ ล้างประวัติการใส่ผิดของอีเมลนี้ */
-  reset(email: string) {
-    this.attempts.delete(this.key(email));
+  /** ล็อกอินสำเร็จ: ล้างประวัติใส่ผิดของอีเมลนี้ (ทั้งเครื่องนี้และรวมทั้งบัญชี) */
+  async reset(email: string, ip: string) {
+    const { device, account } = this.keys(email, ip);
+    await this.prisma.loginAttempt.deleteMany({
+      where: { key: { in: [device, account] } },
+    });
   }
 
-  /** ทิ้งรายการที่หมดอายุแล้ว ไม่ให้ Map โตไปเรื่อย ๆ */
-  private prune(now: number) {
-    if (this.attempts.size < 1000) return;
-    for (const [key, entry] of this.attempts) {
-      if (entry.lockedUntil <= now && now - entry.firstAt > WINDOW_MS) {
-        this.attempts.delete(key);
-      }
-    }
+  /** นับเพิ่มหนึ่งครั้ง ครบ limit ภายในช่วงเวลา = ล็อก */
+  private async bump(key: string, limit: number, now: Date) {
+    const existing = await this.prisma.loginAttempt.findUnique({
+      where: { key },
+    });
+
+    // ไม่เคยผิด หรือผิดครั้งแรกนานเกินช่วงเวลาแล้ว (และไม่ได้ล็อกอยู่) เริ่มนับใหม่
+    const expired =
+      !existing ||
+      (now.getTime() - existing.firstAt.getTime() > WINDOW_MS &&
+        (!existing.lockedUntil || existing.lockedUntil <= now));
+    const count = expired ? 1 : existing.count + 1;
+    const lockedUntil =
+      count >= limit ? new Date(now.getTime() + LOCK_MS) : null;
+
+    await this.prisma.loginAttempt.upsert({
+      where: { key },
+      create: { key, count, firstAt: now, lockedUntil },
+      update: expired
+        ? { count, firstAt: now, lockedUntil }
+        : { count, lockedUntil: lockedUntil ?? existing.lockedUntil },
+    });
   }
 }

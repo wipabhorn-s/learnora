@@ -19,6 +19,7 @@ import { DeleteAccountDto } from '@/user/dto/delete-account.dto';
 import { OTP_RESEND_COOLDOWN_SECONDS } from '@/auth/one-time-code.service';
 import { UpdateProfileDto } from '@/user/dto/update-profile.dto';
 import { UserCreateInput } from '@/user/types/user.type';
+import { RefreshTokenService } from '@/auth/refresh-token.service';
 import {
   BadRequestException,
   ConflictException,
@@ -40,6 +41,7 @@ export class UserService {
     private readonly mailService: MailService,
     private readonly accessTokenService: AccessTokenService,
     private readonly oneTimeCodeService: OneTimeCodeService,
+    private readonly refreshTokenService: RefreshTokenService,
   ) {}
 
   async createUser(input: UserCreateInput) {
@@ -440,6 +442,8 @@ export class UserService {
       this.prisma.emailVerificationToken.deleteMany({ where: { userId } }),
       this.prisma.passwordResetToken.deleteMany({ where: { userId } }),
       this.prisma.oneTimeCode.deleteMany({ where: { userId } }),
+      // ออกจากระบบทุกเครื่อง (status = false ด้วย access token ที่ค้างอยู่จึงใช้ไม่ได้)
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
       // เลขบัญชีธนาคารสำหรับรับเงิน (ผู้สอน) เป็นข้อมูลส่วนตัว ลบทิ้งด้วย
       this.prisma.payoutAccount.deleteMany({ where: { instructorId: userId } }),
       this.prisma.user.update({
@@ -702,7 +706,12 @@ export class UserService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, role: true, isInstructor: true },
+      select: {
+        email: true,
+        role: true,
+        isInstructor: true,
+        sessionVersion: true,
+      },
     });
 
     if (!user) {
@@ -722,6 +731,7 @@ export class UserService {
       email: user.email,
       role: user.role,
       isInstructor: true,
+      ver: user.sessionVersion,
     });
 
     return {
@@ -756,6 +766,31 @@ export class UserService {
 
     await this.updatePassword(userId, dto.newPassword);
 
-    return { message: 'Password changed successfully' };
+    // เปลี่ยนรหัสผ่าน = ออกจากระบบทุกเครื่องที่ล็อกอินด้วยรหัสเดิม
+    // แล้วออก session ใหม่ให้เครื่องที่กดเปลี่ยนอยู่ ผู้ใช้จะได้ไม่หลุดเอง
+    const sessionVersion =
+      await this.refreshTokenService.revokeAllForUser(userId);
+    const [access_token, refresh_token] = await Promise.all([
+      this.accessTokenService.sign({
+        sub: userId,
+        email: user.email,
+        role: user.role,
+        isInstructor: user.isInstructor,
+        ver: sessionVersion,
+      }),
+      this.refreshTokenService.issue(userId),
+    ]);
+
+    return {
+      message: 'Password changed. Other devices have been logged out.',
+      access_token,
+      refresh_token,
+    };
+  }
+
+  /** Log out of all devices: ยกเลิกทุก session รวมเครื่องนี้ด้วย */
+  async logoutAllDevices(userId: string) {
+    await this.refreshTokenService.revokeAllForUser(userId);
+    return { message: 'Logged out of all devices' };
   }
 }

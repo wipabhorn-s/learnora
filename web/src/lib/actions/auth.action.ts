@@ -24,6 +24,7 @@ import { CredentialsSignin } from "next-auth";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import z from "zod";
+import { revokeCurrentSession } from "@/lib/session-token";
 
 export async function registerAction(
   input: RegisterInput,
@@ -164,6 +165,7 @@ export async function verifyEmailAction(
     // เปลี่ยนอีเมลสำเร็จแล้ว session ที่ค้างอยู่ยังถืออีเมลเดิม (อยู่ใน JWT
     // ทั้งของ NextAuth และของ API) ออกจากระบบให้เลยเพื่อไม่ให้เห็นข้อมูลเก่า
     if (await auth()) {
+      await revokeCurrentSession();
       await signOut({ redirect: false });
     }
 
@@ -199,6 +201,7 @@ export async function resendVerificationAction(
 }
 
 export async function logoutAction(): Promise<void> {
+  await revokeCurrentSession();
   await signOut({ redirectTo: "/" });
 }
 
