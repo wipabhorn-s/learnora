@@ -27,7 +27,7 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 const FIELDS = [
@@ -61,6 +61,10 @@ export default function PayoutAccountForm({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  // มีบัญชีแล้ว: แสดงแบบอ่านอย่างเดียว กด Edit ก่อนถึงแก้ได้ (กันแก้พลาดโดยไม่ตั้งใจ)
+  // บัญชีเก่าที่ยังไม่มีรหัสธนาคาร เปิดโหมดแก้ไขไว้เลยเพราะต้องเลือกธนาคารใหม่
+  const [editing, setEditing] = useState(!account?.bankCode);
+  const readOnly = !editing;
 
   const {
     control,
@@ -84,6 +88,7 @@ export default function PayoutAccountForm({
       if (!result.success) return;
 
       reset(data);
+      setEditing(false);
       router.refresh();
     });
   };
@@ -119,6 +124,9 @@ export default function PayoutAccountForm({
                     bank.code === value.code
                   }
                   filter={matchesBank}
+                  // พิมพ์ค้นแล้วกด Enter ได้เลย เลือกรายการแรกที่ตรง
+                  autoHighlight
+                  readOnly={readOnly}
                   disabled={isPending}
                 >
                   <ComboboxInput
@@ -171,6 +179,7 @@ export default function PayoutAccountForm({
                     placeholder={placeholder}
                     inputMode={name === "accountNumber" ? "numeric" : undefined}
                     {...field}
+                    readOnly={readOnly}
                     disabled={isPending}
                     aria-invalid={fieldState.invalid}
                   />
@@ -182,17 +191,44 @@ export default function PayoutAccountForm({
             />
           ))}
 
-          <Button
-            type="submit"
-            disabled={isPending || !isDirty}
-            className="justify-self-start"
-          >
-            {isPending
-              ? "Saving..."
-              : account
-                ? "Update account"
-                : "Save account"}
-          </Button>
+          {/*
+              key แยกทุกปุ่ม: ปุ่ม Edit (type=button) ต้องไม่กลายเป็นปุ่ม submit ตัวเดิม
+              ไม่งั้นคลิกเดียวกันนั้นจะส่งฟอร์มทันทีหลังสลับเป็นโหมดแก้ไข
+            */}
+          {readOnly ? (
+            <Button
+              key="edit"
+              type="button"
+              variant="outline"
+              onClick={() => setEditing(true)}
+            >
+              Edit
+            </Button>
+          ) : (
+            <div className="grid auto-cols-fr grid-flow-col gap-2">
+              <Button key="save" type="submit" disabled={isPending || !isDirty}>
+                {isPending
+                  ? "Saving..."
+                  : account
+                    ? "Update account"
+                    : "Save account"}
+              </Button>
+              {account?.bankCode && (
+                <Button
+                  key="cancel"
+                  type="button"
+                  variant="outline"
+                  disabled={isPending}
+                  onClick={() => {
+                    reset();
+                    setEditing(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+          )}
         </FieldGroup>
       </form>
     </Card>
