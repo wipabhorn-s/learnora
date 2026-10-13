@@ -25,7 +25,13 @@ describe("security headers", () => {
       "https://omise-gateway-production.s3.ap-southeast-1.amazonaws.com",
     );
     expect(directive(csp, "media-src")).toContain("https://res.cloudinary.com");
+    // ลิงก์วิดีโอบทเรียนแบบมีลายเซ็น
+    expect(directive(csp, "media-src")).toContain("https://api.cloudinary.com");
     expect(directive(csp, "connect-src")).toContain("https://*.omise.co");
+    // อัปโหลดวิดีโอบทเรียนตรงจากเบราว์เซอร์
+    expect(directive(csp, "connect-src")).toContain(
+      "https://api.cloudinary.com",
+    );
   });
 
   it("keeps eval and websockets out of production", () => {

@@ -1,6 +1,7 @@
 // src\infrastructure\upload\cloudinary.service.ts
 
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -8,8 +9,9 @@ import {
 import { v2 as cloudinary } from 'cloudinary';
 import { ConfigService } from '@nestjs/config';
 import { EnvVariable } from '@/config/env.validation';
+import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { IMAGE_FORMATS } from '@/common/upload/upload-options';
+import { IMAGE_FORMATS, VIDEO_MAX_BYTES } from '@/common/upload/upload-options';
 
 export type CloudinaryAsset = {
   url: string;
@@ -19,6 +21,19 @@ export type CloudinaryAsset = {
 export type CloudinaryVideoAsset = CloudinaryAsset & {
   durationSeconds: number;
 };
+
+/**
+ * ใบอนุญาตให้เบราว์เซอร์อัปโหลดวิดีโอ 1 ไฟล์ตรงไป Cloudinary
+ * ส่ง fields ทั้งหมด + ไฟล์ (ชื่อช่อง file) เป็น multipart ไปที่ uploadUrl
+ */
+export type VideoUploadTicket = {
+  uploadUrl: string;
+  fields: Record<string, string>;
+};
+
+/** วิดีโอบทเรียนเก็บที่ lessons/<รหัสผู้สอน>/<uuid> ใช้ยืนยันว่าใครอัปโหลด */
+const LESSON_VIDEO_FOLDER = 'lessons';
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
 type CloudinaryResourceType = 'image' | 'video';
 
@@ -68,46 +83,82 @@ export class CloudinaryService {
     });
   }
 
-  uploadVideo(file: Express.Multer.File): Promise<CloudinaryVideoAsset> {
-    return new Promise((resolve, reject) => {
-      const writableStream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: 'video',
-          // วิดีโอเป็นของที่ขาย: เปิดด้วย URL ตรงไม่ได้ ต้องขอลิงก์ที่มีลายเซ็นจาก API
-          type: 'authenticated',
-        },
-        (error, result) => {
-          if (error || !result) {
-            this.logger.error(error);
-            reject(new InternalServerErrorException('Video upload failed'));
-            return;
-          }
+  /**
+   * ออกใบอนุญาตอัปโหลดวิดีโอบทเรียน 1 ไฟล์ (ลายเซ็นใช้ได้ราว 1 ชม. ตามกติกา Cloudinary)
+   *
+   * วิดีโอไม่ผ่าน server ของเรา: ไฟล์ใหญ่ถึง 100 MB กินหน่วยความจำ และโฮสต์อย่าง Vercel
+   * รับ body ได้แค่ไม่กี่ MB ลายเซ็นล็อก public_id กับ type ไว้ ผู้ใช้จึงเลือกที่เก็บเองไม่ได้
+   * และไฟล์เป็น authenticated เสมอ (เปิดด้วย URL ตรงไม่ได้ เพราะเป็นของที่ขาย)
+   */
+  createVideoUploadTicket(ownerId: string): VideoUploadTicket {
+    const { cloud_name, api_key, api_secret } = cloudinary.config();
+    const params = {
+      public_id: `${LESSON_VIDEO_FOLDER}/${ownerId}/${randomUUID()}`,
+      timestamp: String(Math.floor(Date.now() / 1000)),
+      type: 'authenticated',
+    };
 
-          const rawDuration: unknown = result.duration;
+    return {
+      uploadUrl: `https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`,
+      fields: {
+        ...params,
+        api_key: api_key!,
+        signature: cloudinary.utils.api_sign_request(params, api_secret!),
+      },
+    };
+  }
 
-          if (
-            typeof rawDuration !== 'number' ||
-            !Number.isFinite(rawDuration) ||
-            rawDuration <= 0
-          ) {
-            reject(
-              new InternalServerErrorException(
-                'Could not detect video duration',
-              ),
-            );
-            return;
-          }
+  /** public_id นี้มาจากใบอนุญาตที่เราออกให้ผู้สอนคนนี้หรือเปล่า */
+  isVideoUploadedBy(ownerId: string, publicId: string): boolean {
+    return new RegExp(`^${LESSON_VIDEO_FOLDER}/${ownerId}/${UUID}$`).test(
+      publicId,
+    );
+  }
 
-          resolve({
-            url: result.secure_url,
-            publicId: result.public_id,
-            durationSeconds: Math.round(rawDuration),
-          });
-        },
+  /**
+   * อ่านข้อมูลวิดีโอที่เบราว์เซอร์อัปโหลดไว้ (ถาม Cloudinary เอง ไม่เชื่อค่าที่หน้าเว็บส่งมา)
+   * ไม่เจอ / ไม่ใช่วิดีโอ / ใหญ่เกิน = ลบทิ้งแล้วตอบ 400
+   */
+  async getUploadedVideo(publicId: string): Promise<CloudinaryVideoAsset> {
+    let result: { secure_url?: string; duration?: unknown; bytes?: unknown };
+    try {
+      // media_metadata: ไม่ใส่ Cloudinary จะไม่ส่งความยาววิดีโอ (duration) มา
+      result = (await cloudinary.api.resource(publicId, {
+        resource_type: 'video',
+        type: 'authenticated',
+        media_metadata: true,
+      })) as typeof result;
+    } catch (error) {
+      this.logger.warn(`Uploaded video ${publicId} not found`, error);
+      throw new BadRequestException(
+        'We could not find the uploaded video. Please upload it again.',
       );
+    }
 
-      Readable.from(file.buffer).pipe(writableStream);
-    });
+    const reject = async (message: string): Promise<never> => {
+      await this.deleteAsset(publicId, 'video', 'authenticated');
+      throw new BadRequestException(message);
+    };
+
+    if (typeof result.bytes !== 'number' || result.bytes > VIDEO_MAX_BYTES) {
+      return reject('Video must be smaller than 100 MB');
+    }
+
+    const duration = result.duration;
+    if (
+      !result.secure_url ||
+      typeof duration !== 'number' ||
+      !Number.isFinite(duration) ||
+      duration <= 0
+    ) {
+      return reject('This file is not a playable video');
+    }
+
+    return {
+      url: result.secure_url,
+      publicId,
+      durationSeconds: Math.max(1, Math.round(duration)),
+    };
   }
 
   /** ดูจาก URL ที่เก็บไว้ว่าไฟล์อยู่แบบไหน (วิดีโอที่อัปโหลดก่อนเปลี่ยนเป็น upload) */

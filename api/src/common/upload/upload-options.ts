@@ -30,8 +30,8 @@ export const IMAGE_UPLOAD: MulterOptions = {
 /** รูปที่ Cloudinary รับ (กันซ้ำอีกชั้น เผื่อ mimetype ที่ส่งมาไม่ตรงกับไฟล์จริง) */
 export const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
 
-/** วิดีโอบทเรียน: ไม่เกิน 100 MB (ตรงกับหน้าเว็บ) Cloudinary ตรวจซ้ำว่าเป็นวิดีโอจริง */
-export const VIDEO_UPLOAD: MulterOptions = {
-  limits: { fileSize: 100 * MB, files: 1 },
-  fileFilter: acceptMime(/^video\//, 'Lesson video must be a video file'),
-};
+/**
+ * วิดีโอบทเรียน: ไม่เกิน 100 MB (ตรงกับหน้าเว็บ)
+ * เบราว์เซอร์อัปโหลดตรงไป Cloudinary (ไม่ผ่าน API) API ตรวจขนาดจริงตอนบันทึกบทเรียน
+ */
+export const VIDEO_MAX_BYTES = 100 * MB;

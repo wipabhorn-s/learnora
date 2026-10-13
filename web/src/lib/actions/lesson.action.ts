@@ -3,10 +3,37 @@
 import { ApiError } from "@/lib/api/api-error";
 import { LessonApi, LessonResponse } from "@/lib/api/lesson.api";
 import { auth } from "@/lib/auth";
+import type { VideoUploadTicket } from "@/lib/upload-video";
+
+/**
+ * ขอใบอนุญาตให้เบราว์เซอร์อัปโหลดวิดีโอตรงไป Cloudinary (ไฟล์ไม่ผ่าน server ของเรา)
+ * ได้ public_id กลับมาแล้วค่อยส่งให้ createLessonAction / updateLessonAction
+ */
+export async function createVideoUploadAction(): Promise<
+  | { success: true; ticket: VideoUploadTicket }
+  | { success: false; message: string }
+> {
+  const session = await auth();
+
+  if (!session) {
+    return { success: false, message: "Unauthorized" };
+  }
+
+  try {
+    const ticket = await LessonApi.createVideoUpload(session.user.access_token);
+    return { success: true, ticket };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return { success: false, message: error.message };
+    }
+
+    throw error;
+  }
+}
 
 export async function createLessonAction(
   courseId: number,
-  formData: FormData,
+  input: { title: string; videoPublicId: string },
 ): Promise<
   | { success: true; lesson: LessonResponse }
   | { success: false; message: string }
@@ -17,22 +44,21 @@ export async function createLessonAction(
     return { success: false, message: "Unauthorized" };
   }
 
-  const title = formData.get("title");
-  const video = formData.get("videoUrl");
+  const title = input.title.trim();
 
-  if (typeof title !== "string" || !title.trim()) {
+  if (!title) {
     return { success: false, message: "Lesson title is required" };
   }
 
-  if (!(video instanceof File) || video.size === 0) {
+  if (!input.videoPublicId) {
     return { success: false, message: "Lesson video is required" };
   }
 
-  formData.set("courseId", String(courseId));
-  formData.set("title", title.trim());
-
   try {
-    const lesson = await LessonApi.create(formData, session.user.access_token);
+    const lesson = await LessonApi.create(
+      { courseId, title, videoPublicId: input.videoPublicId },
+      session.user.access_token,
+    );
 
     return { success: true, lesson };
   } catch (error) {
@@ -80,7 +106,7 @@ export async function moveLessonAction(
 
 export async function updateLessonAction(
   lessonId: number,
-  formData: FormData,
+  input: { title?: string; videoPublicId?: string },
 ): Promise<
   | { success: true; lesson: LessonResponse }
   | { success: false; message: string }
@@ -91,24 +117,19 @@ export async function updateLessonAction(
     return { success: false, message: "Unauthorized" };
   }
 
-  const title = formData.get("title");
-  const video = formData.get("videoUrl");
+  const title = input.title?.trim();
 
-  if (
-    (typeof title !== "string" || !title.trim()) &&
-    (!(video instanceof File) || video.size === 0)
-  ) {
+  if (!title && !input.videoPublicId) {
     return { success: false, message: "Title or video is required" };
-  }
-
-  if (typeof title === "string") {
-    formData.set("title", title.trim());
   }
 
   try {
     const lesson = await LessonApi.update(
       lessonId,
-      formData,
+      {
+        ...(title && { title }),
+        ...(input.videoPublicId && { videoPublicId: input.videoPublicId }),
+      },
       session.user.access_token,
     );
 

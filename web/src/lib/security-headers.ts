@@ -6,7 +6,7 @@
  * โดเมนภายนอกที่ใช้จริงมีแค่:
  * - Opn (Omise.js โทเค็นบัตร, รูป QR พร้อมเพย์)
  * - Google Identity Services (ปุ่มเชื่อมบัญชี Google ในหน้า Login & security)
- * - Cloudinary (รูปและวิดีโอ), Unsplash (รูปตัวอย่าง)
+ * - Cloudinary (รูปและวิดีโอ รวมถึงปลายทางอัปโหลดวิดีโอ), Unsplash (รูปตัวอย่าง)
  * เพิ่มบริการภายนอกใหม่ ต้องเพิ่มโดเมนที่นี่ด้วย ไม่งั้นเบราว์เซอร์จะบล็อก
  *
  * script-src ยังต้องมี 'unsafe-inline' เพราะ Next ใส่สคริปต์ inline ตอน hydrate
@@ -39,11 +39,20 @@ export function contentSecurityPolicy(isDev: boolean): string {
       // CSP เช็กปลายทางหลัง redirect ด้วย ไม่ใส่โดเมนนี้รูป QR จะไม่ขึ้น
       "https://omise-gateway-production.s3.ap-southeast-1.amazonaws.com",
     ],
-    "media-src": ["'self'", "blob:", "https://res.cloudinary.com"],
+    "media-src": [
+      "'self'",
+      "blob:",
+      "https://res.cloudinary.com",
+      // วิดีโอบทเรียนเปิดผ่านลิงก์มีลายเซ็น (api.cloudinary.com/.../download)
+      // ไม่ใส่ = หน้าเรียนเล่นวิดีโอไม่ได้เลย
+      "https://api.cloudinary.com",
+    ],
     "font-src": ["'self'", "data:"],
     "connect-src": [
       "'self'",
       "https://*.omise.co",
+      // ผู้สอนอัปโหลดวิดีโอบทเรียนจากเบราว์เซอร์ตรงไป Cloudinary (ไม่ผ่าน server เรา)
+      "https://api.cloudinary.com",
       "https://accounts.google.com/gsi/",
       // hot reload ตอน dev
       ...(isDev ? ["ws:", "wss:"] : []),

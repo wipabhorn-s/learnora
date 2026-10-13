@@ -5,12 +5,14 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   createLessonAction,
+  createVideoUploadAction,
   moveLessonAction,
   removeLessonAction,
   updateLessonAction,
 } from "@/lib/actions/lesson.action";
 import type { LessonResponse } from "@/lib/api/lesson.api";
 import { toast } from "@/lib/toast";
+import { uploadVideo } from "@/lib/upload-video";
 import {
   GripVertical,
   Loader2,
@@ -52,8 +54,10 @@ export default function EditLessons({
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // null = ไม่ได้อัปโหลดอยู่, ตัวเลข = อัปโหลดวิดีโอไปแล้วกี่ %
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-  const isUploading = isPending && mode !== null && videoFile !== null;
+  const isUploading = uploadPercent !== null;
 
   const resetEditor = () => {
     setMode(null);
@@ -117,16 +121,46 @@ export default function EditLessons({
       return;
     }
 
-    const formData = new FormData();
-    formData.set("title", trimmedTitle);
-    if (videoFile) formData.set("videoUrl", videoFile);
-
     setError(null);
     startTransition(async () => {
+      // วิดีโอไปที่ Cloudinary ตรงจากเบราว์เซอร์ก่อน แล้วค่อยบันทึกบทเรียนด้วย public_id ที่ได้
+      let videoPublicId: string | undefined;
+      if (videoFile) {
+        const upload = await createVideoUploadAction();
+        if (!upload.success) {
+          toast.error(upload.message);
+          return;
+        }
+
+        setUploadPercent(0);
+        try {
+          videoPublicId = await uploadVideo(
+            upload.ticket,
+            videoFile,
+            setUploadPercent,
+          );
+        } catch (uploadError) {
+          toast.error(
+            uploadError instanceof Error
+              ? uploadError.message
+              : "Video upload failed. Please try again.",
+          );
+          return;
+        } finally {
+          setUploadPercent(null);
+        }
+      }
+
       const result =
         mode === "edit" && editingLessonId
-          ? await updateLessonAction(editingLessonId, formData)
-          : await createLessonAction(courseId, formData);
+          ? await updateLessonAction(editingLessonId, {
+              title: trimmedTitle,
+              videoPublicId,
+            })
+          : await createLessonAction(courseId, {
+              title: trimmedTitle,
+              videoPublicId: videoPublicId!,
+            });
 
       if (!result.success) {
         toast.error(result.message);
@@ -339,12 +373,22 @@ export default function EditLessons({
                   <p className="max-w-full truncate font-medium text-primary">
                     Uploading {videoFile!.name}
                   </p>
-                  <div className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-primary/15">
-                    <div className="animate-indeterminate-bar h-full w-1/3 rounded-full bg-primary" />
+                  <div
+                    role="progressbar"
+                    aria-label="Video upload progress"
+                    aria-valuenow={uploadPercent ?? 0}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-primary/15"
+                  >
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width] duration-200"
+                      style={{ width: `${uploadPercent}%` }}
+                    />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {formatFileSize(videoFile!.size)} · Please keep this page
-                    open
+                    {uploadPercent}% of {formatFileSize(videoFile!.size)} ·
+                    Please keep this page open
                   </p>
                 </div>
               ) : (

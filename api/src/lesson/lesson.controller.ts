@@ -5,7 +5,6 @@ import { MoveLessonDto } from '@/lesson/dto/move-lesson.dto';
 import { UpdateLessonDto } from '@/lesson/dto/update-lesson.dto';
 import { LessonService } from '@/lesson/lesson.service';
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -13,47 +12,40 @@ import {
   ParseIntPipe,
   Patch,
   Post,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { VIDEO_UPLOAD } from '@/common/upload/upload-options';
 
 @Instructor()
 @Controller('lessons')
 export class LessonController {
   constructor(private readonly lessonService: LessonService) {}
 
+  /**
+   * ขอใบอนุญาตอัปโหลดวิดีโอ 1 ไฟล์ เบราว์เซอร์ส่งไฟล์ตรงไป Cloudinary
+   * แล้วเอา public_id ที่ได้มาใส่ตอนสร้าง/แก้บทเรียน
+   */
+  @Post('video-upload')
+  createVideoUpload(@CurrentUser('sub') instructorId: string) {
+    return this.lessonService.createVideoUpload(instructorId);
+  }
+
   @Post('/')
-  @UseInterceptors(FileInterceptor('videoUrl', VIDEO_UPLOAD))
   createLesson(
     @CurrentUser('sub') instructorId: string,
     @Body() createLessonDto: CreateLessonDto,
-    @UploadedFile() videoFile?: Express.Multer.File,
   ) {
-    if (!videoFile) {
-      throw new BadRequestException('Video file is required');
-    }
-    return this.lessonService.createLesson(
-      instructorId,
-      createLessonDto,
-      videoFile,
-    );
+    return this.lessonService.createLesson(instructorId, createLessonDto);
   }
 
   @Patch(':lessonId')
-  @UseInterceptors(FileInterceptor('videoUrl', VIDEO_UPLOAD))
   updateLesson(
     @CurrentUser('sub') instructorId: string,
     @Param('lessonId', ParseIntPipe) lessonId: number,
     @Body() updateLessonDto: UpdateLessonDto,
-    @UploadedFile() videoFile?: Express.Multer.File,
   ) {
     return this.lessonService.updateLesson(
       instructorId,
       lessonId,
       updateLessonDto,
-      videoFile,
     );
   }
 
