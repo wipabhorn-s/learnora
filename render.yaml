@@ -1,8 +1,10 @@
-# Render Blueprint: สร้าง API + เว็บ บน Render แบบฟรีในครั้งเดียว
+# Render Blueprint: สร้าง API บน Render แบบฟรี
 # Render → New → Blueprint → เลือก repo นี้ → กรอกค่าที่ขึ้นว่า "sync: false"
-# ฐานข้อมูลใช้ Neon (ฟรี) ไม่ได้สร้างที่นี่ ดูขั้นตอนใน README หัวข้อ "Deploy (free)"
+# หน้าเว็บ (Next.js) อยู่บน Vercel ฐานข้อมูลใช้ Neon ดูขั้นตอนใน README หัวข้อ "Deploy (free)"
 #
-# แพ็กเกจฟรี: ไม่มีคนใช้ 15 นาทีจะหลับ คนแรกที่เข้ามารอปลุกประมาณ 1 นาที
+# มี service เดียวบน Render โดยตั้งใจ: Render ให้ฟรี 750 ชม./เดือนรวมทุก service
+# service เดียวจึงเปิดได้ตลอดทั้งเดือน (ราว 744 ชม.) ถ้ามีบริการ ping /health ทุก 10 นาที
+# ไม่ ping = ไม่มีคนใช้ 15 นาทีจะหลับ คำขอแรกหลังจากนั้นรอประมาณ 1 นาที
 
 services:
   # ─────────────────────────── API (NestJS) ───────────────────────────
@@ -27,7 +29,7 @@ services:
       # ── ค่าที่ต้องกรอกเอง ──
       - key: DATABASE_URL # Neon: connection string แบบ direct (ไม่ใช่ -pooler) ลงท้าย ?sslmode=require
         sync: false
-      - key: FRONTEND_URL # URL ของเว็บ เช่น https://learnora-web.onrender.com (ไม่มี / ปิดท้าย)
+      - key: FRONTEND_URL # URL ของเว็บบน Vercel เช่น https://learnora-th.vercel.app (ไม่มี / ปิดท้าย)
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
@@ -67,44 +69,6 @@ services:
       # ⚠️ คัดลอกไปเก็บสำรองไว้ด้วย หายแล้วอ่านเลขบัญชีผู้สอนที่บันทึกไว้ไม่ออก
       - key: PAYOUT_ENCRYPTION_KEY
         generateValue: true
+      # คัดลอกค่านี้ไปใส่ INTERNAL_API_SECRET ของเว็บบน Vercel ด้วย (ต้องตรงกัน)
       - key: INTERNAL_API_SECRET
         generateValue: true
-
-  # ─────────────────────────── Web (Next.js) ───────────────────────────
-  - type: web
-    name: learnora-web
-    runtime: node
-    plan: free
-    region: singapore
-    rootDir: web
-    buildCommand: corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm build
-    # next start ใช้ PORT ที่ Render กำหนดให้เอง
-    startCommand: ./node_modules/.bin/next start
-    envVars:
-      - key: NODE_VERSION
-        value: "24"
-      # corepack ดาวน์โหลด pnpm ตามเวอร์ชันที่ pin ไว้โดยไม่ถาม (build ไม่มีคนกดยืนยัน)
-      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
-        value: "0"
-      # ── ค่าที่ต้องกรอกเอง ──
-      - key: API_URL # URL ของ API เช่น https://learnora-api.onrender.com
-        sync: false
-      - key: AUTH_URL # URL ของเว็บนี้เอง เช่น https://learnora-web.onrender.com (ต้องมี ไม่งั้นล็อกอินไม่ได้)
-        sync: false
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID # ค่าเดียวกับ GOOGLE_CLIENT_ID
-        sync: false
-      - key: NEXT_PUBLIC_OMISE_PUBLIC_KEY # pkey_test_...
-        sync: false
-      # ── Render สุ่มให้ / ดึงจาก API ──
-      - key: AUTH_SECRET
-        generateValue: true
-      # ต้องเป็นค่าเดียวกับของ API: API จะเชื่อ IP ผู้ใช้ที่เว็บส่งไป (rate limit)
-      - key: INTERNAL_API_SECRET
-        fromService:
-          type: web
-          name: learnora-api
-          envVarKey: INTERNAL_API_SECRET
