@@ -362,8 +362,9 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 ### Lessons — `/lessons`
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/lessons` | Add a lesson (video upload) |
-| PATCH | `/lessons/:lessonId` | Update a lesson |
+| POST | `/lessons/video-upload` | Get a signed ticket to upload one video straight to Cloudinary |
+| POST | `/lessons` | Add a lesson (`title`, `courseId`, `videoPublicId` from the upload) |
+| PATCH | `/lessons/:lessonId` | Update a lesson (`title` and/or a new `videoPublicId`) |
 | PATCH | `/lessons/:lessonId/move` | Reorder a lesson |
 | DELETE | `/lessons/:lessonId` | Delete a lesson |
 
@@ -611,3 +612,47 @@ sign up on the web app, verify the email, and buy a course with a test card.
 
 To turn on real payments later: complete Opn's business verification, switch to
 `skey_` / `pkey_` live keys, and add a live-mode webhook.
+
+### Web on Vercel (no sleeping)
+
+Render counts 750 free hours a month across **all** free services, so only one
+service can stay awake around the clock. Putting the web app on Vercel leaves
+the API as the only Render service: a free pinger keeps it awake (about 744
+hours a month) and the site never makes visitors wait for a cold start.
+
+> Vercel's free Hobby plan is for non-commercial projects (demo / portfolio).
+> Lesson videos go from the browser straight to Cloudinary, so Vercel's 4.5 MB
+> request limit does not apply to them; thumbnails and avatars are cropped to
+> small JPEGs in the browser before upload.
+
+**1. Vercel project**
+1. Sign up at vercel.com with GitHub → **Add New → Project** → import this repo.
+2. Set **Root Directory** to `web` (framework is detected as Next.js; pnpm is
+   picked up from `packageManager`). `web/vercel.json` runs the functions in
+   Singapore (`sin1`), next to the API and database.
+3. Add the environment variables (Production):
+
+   | Variable | Value |
+   | --- | --- |
+   | `API_URL` | The API URL, e.g. `https://learnora-api.onrender.com` |
+   | `AUTH_SECRET` | Copy from the Render web service (or generate a new one — everyone is signed out once) |
+   | `AUTH_URL` | The Vercel URL, e.g. `https://learnora.vercel.app` |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same as before |
+   | `NEXT_PUBLIC_OMISE_PUBLIC_KEY` | Same as before |
+   | `INTERNAL_API_SECRET` | Copy the value from the **API** service on Render (must match exactly) |
+
+4. Deploy, then note the production URL.
+
+**2. Point everything at the new web URL**
+- Render → `learnora-api` → `FRONTEND_URL` = the Vercel URL (links in emails).
+- Google Cloud Console → OAuth client: add the Vercel URL to **Authorized
+  JavaScript origins** and `<Vercel URL>/api/auth/callback/google` to
+  **Authorized redirect URIs**.
+- The Opn webhook does not change (it points at the API).
+
+**3. Keep the API awake** — create a free job at cron-job.org (or UptimeRobot)
+that requests `<API URL>/health` every 10 minutes.
+
+**4. Retire the Render web service** — once the Vercel site works (sign in with
+Google, buy a course, upload a lesson video), suspend or delete `learnora-web`
+on Render so it stops using free hours, and remove it from `render.yaml`.

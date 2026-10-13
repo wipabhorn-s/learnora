@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/api-fetch";
+import type { VideoUploadTicket } from "@/lib/upload-video";
 
 export type LessonResponse = {
   id: number;
@@ -9,19 +10,35 @@ export type LessonResponse = {
   orderNo: number;
 };
 
+/** videoPublicId = public_id ของวิดีโอที่เบราว์เซอร์อัปโหลดตรงไป Cloudinary แล้ว */
+export type CreateLessonInput = {
+  courseId: number;
+  title: string;
+  videoPublicId: string;
+};
+export type UpdateLessonInput = { title?: string; videoPublicId?: string };
+
 export const LessonApi = {
-  create(formData: FormData, token: string) {
-    return apiFetch<LessonResponse>("/lessons", {
+  /** ขอใบอนุญาตอัปโหลดวิดีโอ 1 ไฟล์ตรงไป Cloudinary */
+  createVideoUpload(token: string) {
+    return apiFetch<VideoUploadTicket>("/lessons/video-upload", {
       method: "POST",
-      body: formData,
       token,
     });
   },
 
-  update(lessonId: number, formData: FormData, token: string) {
+  create(input: CreateLessonInput, token: string) {
+    return apiFetch<LessonResponse>("/lessons", {
+      method: "POST",
+      body: input,
+      token,
+    });
+  },
+
+  update(lessonId: number, input: UpdateLessonInput, token: string) {
     return apiFetch<LessonResponse>(`/lessons/${lessonId}`, {
       method: "PATCH",
-      body: formData,
+      body: input,
       token,
     });
   },

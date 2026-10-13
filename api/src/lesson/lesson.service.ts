@@ -51,11 +51,36 @@ export class LessonService {
     return lesson;
   }
 
-  async createLesson(
-    instructorId: string,
-    dto: CreateLessonDto,
-    videoFile: Express.Multer.File,
-  ) {
+  createVideoUpload(instructorId: string) {
+    return this.cloudinaryService.createVideoUploadTicket(instructorId);
+  }
+
+  /**
+   * รับวิดีโอที่เบราว์เซอร์อัปโหลดตรงไป Cloudinary มาใช้กับบทเรียน
+   * ต้องเป็นไฟล์ที่ผู้สอนคนนี้อัปโหลดด้วยใบอนุญาตของเรา และยังไม่ถูกใช้กับบทเรียนอื่น
+   * (ใช้ซ้ำไม่ได้ ไม่งั้นลบบทเรียนหนึ่งแล้ววิดีโอของอีกบทจะหายไปด้วย)
+   */
+  private async claimUploadedVideo(instructorId: string, publicId: string) {
+    if (!this.cloudinaryService.isVideoUploadedBy(instructorId, publicId)) {
+      throw new BadRequestException(
+        'We could not find the uploaded video. Please upload it again.',
+      );
+    }
+
+    const usedBy = await this.prisma.lesson.findFirst({
+      where: { videoPublicId: publicId },
+      select: { id: true },
+    });
+    if (usedBy) {
+      throw new BadRequestException(
+        'This video is already used by another lesson',
+      );
+    }
+
+    return this.cloudinaryService.getUploadedVideo(publicId);
+  }
+
+  async createLesson(instructorId: string, dto: CreateLessonDto) {
     await this.findOwnedCourse(instructorId, dto.courseId);
 
     const lastLesson = await this.prisma.lesson.findFirst({
@@ -64,7 +89,10 @@ export class LessonService {
       select: { orderNo: true },
     });
 
-    const video = await this.cloudinaryService.uploadVideo(videoFile);
+    const video = await this.claimUploadedVideo(
+      instructorId,
+      dto.videoPublicId,
+    );
 
     try {
       return await this.prisma.lesson.create({
@@ -91,17 +119,16 @@ export class LessonService {
   async updateLesson(
     instructorId: string,
     lessonId: number,
-    dto: UpdateLessonDto,
-    videoFile?: Express.Multer.File,
+    { videoPublicId, ...dto }: UpdateLessonDto,
   ) {
     const lesson = await this.findOwnedLesson(instructorId, lessonId);
 
-    if (dto.title === undefined && !videoFile) {
-      throw new BadRequestException('Title or video file is required');
+    if (dto.title === undefined && !videoPublicId) {
+      throw new BadRequestException('Title or video is required');
     }
 
-    const video = videoFile
-      ? await this.cloudinaryService.uploadVideo(videoFile)
+    const video = videoPublicId
+      ? await this.claimUploadedVideo(instructorId, videoPublicId)
       : undefined;
 
     try {

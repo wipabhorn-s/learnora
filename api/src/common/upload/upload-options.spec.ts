@@ -1,4 +1,4 @@
-import { IMAGE_UPLOAD, VIDEO_UPLOAD } from '@/common/upload/upload-options';
+import { IMAGE_UPLOAD, VIDEO_MAX_BYTES } from '@/common/upload/upload-options';
 import { BadRequestException } from '@nestjs/common';
 
 /** เรียก fileFilter ของ multer แล้วคืนผล (ผ่าน/ไม่ผ่าน + error) */
@@ -34,16 +34,9 @@ describe('upload options', () => {
     },
   );
 
-  it('accepts videos and rejects everything else for lessons', () => {
-    expect(check(VIDEO_UPLOAD, 'video/mp4').accepted).toBe(true);
-    expect(check(VIDEO_UPLOAD, 'video/quicktime').accepted).toBe(true);
-    expect(check(VIDEO_UPLOAD, 'application/zip').error).toBeInstanceOf(
-      BadRequestException,
-    );
-  });
-
-  it('caps file size (15 MB images, 100 MB videos) so huge uploads never fill memory', () => {
+  it('caps file size (15 MB images, 100 MB videos)', () => {
     expect(IMAGE_UPLOAD.limits?.fileSize).toBe(15 * 1024 * 1024);
-    expect(VIDEO_UPLOAD.limits?.fileSize).toBe(100 * 1024 * 1024);
+    // วิดีโออัปโหลดตรงไป Cloudinary ขนาดถูกตรวจตอนบันทึกบทเรียน (CloudinaryService.getUploadedVideo)
+    expect(VIDEO_MAX_BYTES).toBe(100 * 1024 * 1024);
   });
 });
