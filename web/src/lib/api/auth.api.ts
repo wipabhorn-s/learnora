@@ -23,6 +23,8 @@ export const AuthApi = {
     return apiFetch<LoginResponse | LoginCodeRequired>("/auth/login", {
       method: "POST",
       body: data,
+      // ล็อกอินส่งซ้ำได้ ไม่เกิดข้อมูลซ้ำ รอ API ตื่นแทนการขึ้น error
+      retry: true,
     });
   },
 
@@ -61,6 +63,8 @@ export const AuthApi = {
     return apiFetch<LoginResponse>("/auth/google", {
       method: "POST",
       body: { idToken, asInstructor },
+      // กลับมาจากหน้า Google แล้ว API ยังหลับอยู่ = ล็อกอินไม่ผ่าน ต้องรอให้ตื่น
+      retry: true,
     });
   },
 

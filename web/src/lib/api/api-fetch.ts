@@ -11,7 +11,58 @@ export type ApiFetchOptions = Omit<RequestInit, "body"> & {
   token?: string;
   /** IP ของผู้ใช้ ส่งเองได้ในที่ที่อ่าน header ของคำขอไม่ได้ (เช่น proxy.ts) */
   clientIp?: string;
+  /**
+   * ลองใหม่เองเมื่อ API ยังไม่พร้อม (ดู fetchWhenAwake) ค่าเริ่มต้น: เฉพาะ GET
+   * คำขอที่เปลี่ยนข้อมูลต้องเปิดเองเมื่อส่งซ้ำแล้วไม่เสียหาย (เช่น ล็อกอิน)
+   * ห้ามเปิดกับการจ่ายเงิน/สร้างข้อมูล เพราะส่งซ้ำอาจเกิดรายการซ้ำ
+   */
+  retry?: boolean;
 };
+
+/** Render ตอบแบบนี้ตอน API กำลังตื่นจากหลับ / กำลัง deploy (คำขอยังไม่ถึงโค้ดเรา) */
+const API_NOT_READY = new Set([502, 503, 504]);
+
+/**
+ * รอก่อนลองใหม่แต่ละรอบ (ms) รวม 60 วินาที: API แพ็กเกจฟรีใช้เวลาตื่นราว 50 วินาที
+ * ถี่ช่วงแรกเผื่อเป็นแค่สะดุดชั่วครู่ แล้วค่อยห่างขึ้น
+ */
+export const RETRY_DELAYS_MS = [
+  1_000, 2_000, 4_000, 8_000, 15_000, 15_000, 15_000,
+];
+
+/**
+ * เรียก API แล้วรอให้มันตื่นถ้ายังไม่พร้อม แทนที่จะปล่อยให้ผู้ใช้เจอ error
+ * (แพ็กเกจฟรีหลับเมื่อไม่มีคนใช้ 15 นาที คนแรกที่เข้ามาเคยเจอหน้า Courses ว่าง
+ * และล็อกอินด้วย Google ไม่ผ่านเพราะ "Bad Gateway")
+ */
+async function fetchWhenAwake(
+  url: string,
+  init: RequestInit,
+  retry: boolean,
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const delay = retry ? RETRY_DELAYS_MS[attempt] : undefined;
+
+    try {
+      // ระหว่าง render หน้าเดียว React จำผล fetch แบบ GET ที่หน้าตาเหมือนกันไว้
+      // รอบลองใหม่จึงได้ผลล้มเหลวเดิมกลับมาโดยไม่ได้ยิงจริง ใส่ signal = ไม่ให้จำ
+      const response = await fetch(
+        url,
+        attempt === 0 || init.signal
+          ? init
+          : { ...init, signal: new AbortController().signal },
+      );
+      if (delay === undefined || !API_NOT_READY.has(response.status)) {
+        return response;
+      }
+    } catch (error) {
+      // ต่อไม่ติดเลย (API ยังไม่เปิดรับคำขอ) หมดรอบแล้วค่อยโยน error จริงออกไป
+      if (delay === undefined) throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
 
 /** IP แรกใน X-Forwarded-For = เครื่องของผู้ใช้ (ตัวถัดไปคือ proxy ระหว่างทาง) */
 export function clientIpFrom(source: Headers): string | undefined {
@@ -41,7 +92,7 @@ export async function apiFetch<T>(
   path: string,
   options: ApiFetchOptions = {},
 ): Promise<T> {
-  const { body, headers, token, clientIp, ...init } = options;
+  const { body, headers, token, clientIp, retry, ...init } = options;
 
   const newHeaders = new Headers(headers);
   if (token) {
@@ -64,11 +115,12 @@ export async function apiFetch<T>(
 
   const newBody = body instanceof FormData ? body : JSON.stringify(body);
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    body: newBody,
-    headers: newHeaders,
-  });
+  const method = (init.method ?? "GET").toUpperCase();
+  const response = await fetchWhenAwake(
+    `${API_URL}${path}`,
+    { ...init, body: newBody, headers: newHeaders },
+    retry ?? (method === "GET" || method === "HEAD"),
+  );
 
   // ส่ง token ไปแล้วโดน 401 = session ที่ถืออยู่ใช้ไม่ได้แล้ว (token หมดอายุ
   // บัญชีถูกลบ หรือโดนระงับ) ล็อกเอาต์ให้เลยแทนที่จะปล่อยให้หน้าพังเป็น error

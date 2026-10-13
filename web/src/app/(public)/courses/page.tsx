@@ -4,6 +4,7 @@ import CourseToolbar from "@/components/features/course/CourseToolbar";
 import EmptyState from "@/components/shared/EmptyState";
 import Pagination from "@/components/shared/Pagination";
 import { Card } from "@/components/ui/card";
+import { ApiError } from "@/lib/api/api-error";
 import { CartApi } from "@/lib/api/cart.api";
 import { CourseApi, FindCoursesResponse } from "@/lib/api/course.api";
 import { getOwnedCourseIds, PurchaseApi } from "@/lib/api/purchase.api";
@@ -13,7 +14,7 @@ import { FILTER_KEYS } from "@/lib/constants/course-filters";
 import { formatEnum } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CATEGORIES } from "@/lib/schemas/course.schema";
-import { BookOpen, SearchX } from "lucide-react";
+import { BookOpen, CloudOff, RotateCw, SearchX } from "lucide-react";
 import { Metadata } from "next";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
@@ -38,6 +39,7 @@ export default async function CoursesPage({
   const session = await auth();
   const user = session?.user;
 
+  let loadFailed = false;
   let data: FindCoursesResponse = {
     courses: [],
     total: 0,
@@ -54,8 +56,11 @@ export default async function CoursesPage({
       sort: params.sort,
       page: params.page ? Number(params.page) : undefined,
     });
-  } catch {
+  } catch (error) {
     // ตัวกรองไม่ถูกต้อง (เช่นแก้ URL เอง) → แสดงผลว่าง แทนที่จะพังทั้งหน้า
+    // error อื่น = ติดต่อ API ไม่ได้ (เช่นกำลังตื่นจากหลับ) ต้องบอกตรง ๆ ว่าโหลดไม่ได้
+    // ไม่ใช่ขึ้นว่า "ยังไม่มีคอร์ส" ทั้งที่มี
+    loadFailed = !(error instanceof ApiError && error.statusCode === 400);
   }
 
   let cartCourseIds = new Set<number>();
@@ -125,7 +130,8 @@ export default async function CoursesPage({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-5">
-          <CourseToolbar total={data.total} />
+          {/* โหลดไม่ได้ก็ไม่รู้จำนวนจริง อย่าขึ้นว่า "0 courses" */}
+          {!loadFailed && <CourseToolbar total={data.total} />}
 
           {hasCourses ? (
             <>
@@ -154,7 +160,15 @@ export default async function CoursesPage({
                 />
               </div>
             </>
-          ) : isFiltered ? (
+          ) : loadFailed ? (
+          <EmptyState
+            icon={CloudOff}
+            title="We couldn't load courses"
+            description="Our server is taking longer than usual to respond. Please try again in a moment."
+            action={{ label: "Try again", href: returnTo, icon: RotateCw }}
+            className="py-12"
+          />
+        ) : isFiltered ? (
             <EmptyState
               icon={SearchX}
               title="No courses match"
