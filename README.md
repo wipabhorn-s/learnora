@@ -5,6 +5,11 @@ publish your own courses as an instructor, and manage the whole platform as an a
 
 Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Router)** web client.
 
+**Live demo:** [learnora-th.vercel.app](https://learnora-th.vercel.app) — payments run in
+Opn **test mode**, so you can check out with a test card (e.g. `4242 4242 4242 4242`,
+any future expiry, any CVV) and no real money moves. The API runs on a free plan;
+if it has been idle, the first page may take up to a minute while it wakes up.
+
 ---
 
 ## Table of contents
@@ -43,8 +48,12 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 
 ### Instructor
 - Create, edit, publish and delete courses (thumbnail upload via Cloudinary)
-- Manage lessons: add, edit, reorder, delete (video upload via Cloudinary)
+- Manage lessons: add, edit, reorder, delete. Videos upload from the browser
+  straight to Cloudinary with a progress bar (signed, one-file upload tickets)
 - Instructor dashboard: revenue, students and course performance
+- **Earnings**: 70% revenue share, pending vs. available balance (after the
+  14-day refund window) and payout history; save a payout bank account picked
+  from the banks Opn supports (search in English, Thai or by bank code)
 - Preview own course in the player
 
 ### Admin / Super admin
@@ -58,23 +67,33 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
   decline with a reason; the student is emailed either way. Revenue figures
   subtract partial refunds. Direct refunds from the Payments page are limited to
   duplicate payments the system flagged
+- **Payouts**: see what each instructor is owed and record bank transfers
+  (the instructor is emailed)
 - Super admin: create and manage admin accounts
 
 ### Auth and account security
 - Email + password registration with **mandatory email verification** — the
-  account cannot log in until the link in the inbox is clicked
+  account cannot log in until the link in the inbox is clicked. Signing up
+  requires accepting the Terms of Service and Privacy Policy
 - Sign in with Google (OAuth via NextAuth, ID token verified server-side)
 - Forgot password / reset password with single-use, hashed tokens
 - **Strong password policy** shared by API and web: 8–72 printable ASCII characters
-  with lowercase, uppercase, number and symbol, plus a live checklist in the forms
+  with lowercase, uppercase, number and symbol, with a live strength badge and a
+  hint for the next missing rule
 - **Two-factor authentication** by email: a 6-digit code is required after the
   password (Google sign-in skips it because Google already verified the user)
+- **Sessions**: short-lived access tokens renewed with rotating refresh tokens;
+  **Log out of all devices** ends every session at once
 - **Login & security** settings: change password, connect or disconnect Google,
   set a first password, change the email address (password + confirmation link
   required), turn two-factor authentication on or off, and **delete the account**
   (personal data is erased; anonymised receipts are kept for accounting)
-- **Login lockout**: 5 wrong passwords within 15 minutes lock that email for 15
-  minutes (counted per email, because the web server calls the API from one IP)
+- **Login lockout**: 5 wrong passwords from the same email and IP within 15
+  minutes lock that device for 15 minutes; 30 failures across all IPs lock the
+  account
+- **No account enumeration**: sign-up and login answer the same way whether or
+  not an email is registered (the owner of an existing address gets an email
+  instead)
 - Roles: `STUDENT`, `ADMIN`, `SUPER ADMIN`. Teaching is a **capability**
   (`isInstructor`), not a role, so one account can buy, learn and teach
 
@@ -92,8 +111,10 @@ Built as a full-stack monorepo: a **NestJS** REST API and a **Next.js (App Route
 | UI | Tailwind CSS 4, shadcn/ui, Base UI, lucide-react |
 | Forms | react-hook-form + Zod |
 | Payments | Opn Payments / Omise (REST API + Omise.js card tokenization) |
-| Media | Cloudinary (avatars, thumbnails, lesson videos) |
-| Package manager | pnpm |
+| Media | Cloudinary (avatars, thumbnails, lesson videos — videos upload straight from the browser) |
+| Testing | Jest (API), Vitest + Testing Library (web) |
+| Hosting | Vercel (web), Render (API), Neon (PostgreSQL) |
+| Package manager | pnpm 11 (pinned through `packageManager`, run with Corepack) |
 
 ---
 
@@ -142,6 +163,12 @@ learnora/
 The web app never calls the API from the browser: pages and client components call
 **server actions** (`src/lib/actions`), which call the typed API client
 (`src/lib/api`), which attaches the JWT access token from the NextAuth session.
+The one thing the browser sends elsewhere is a lesson video: it goes straight to
+Cloudinary with an upload ticket signed by the API (`src/lib/upload-video.ts`).
+
+`apiFetch` waits for a sleeping API instead of failing: it retries `502/503/504`
+and refused connections for up to 60 seconds (GETs by default, and the login
+calls), but never resends payments or other writes.
 
 ---
 
@@ -149,8 +176,8 @@ The web app never calls the API from the browser: pages and client components ca
 
 ### Prerequisites
 
-- Node.js 20+
-- pnpm
+- Node.js 22+
+- pnpm 11 (`corepack enable`, or run commands as `corepack pnpm ...`)
 - PostgreSQL 14+ (with the `citext` extension available)
 - Accounts for: Google Cloud (OAuth client), Cloudinary, Brevo, Opn Payments (test keys are enough)
 
@@ -237,7 +264,7 @@ cd web && pnpm dev              # http://localhost:3000
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID — must match the one used by the web app |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Cloudinary credentials |
 | `OMISE_SECRET_KEY` | Opn Payments secret key (`skey_test_...` / `skey_...`) |
-| `OMISE_WEBHOOK_SECRET` | Webhook signing secret from Opn Dashboard → Webhooks (base64). Optional in development; without it signatures are not checked and a warning is logged in production |
+| `OMISE_WEBHOOK_SECRET` | Webhook signing secret from Opn Dashboard → Webhooks (base64). Optional with a test key (signatures are then not checked); **required with a live key** (`skey_live_...`) — the API refuses to start without it |
 | `INTERNAL_API_SECRET` | Shared secret with the web app (same value on both). With it, the API trusts the visitor IP the web server sends in `X-Client-IP` for rate limiting; without it (local dev) the API uses the connecting IP + `TRUST_PROXY` |
 | `INSTRUCTOR_REVENUE_SHARE_PERCENT` | Instructors' share of each sale, 0–100 (default `70`); the rest is the platform's |
 | `PAYOUT_ENCRYPTION_KEY` | 32 random bytes, base64 — encrypts instructors' bank account numbers (AES-256-GCM). Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Use a different key per environment and **never lose or change it** once accounts are saved |
@@ -253,7 +280,7 @@ refuses to start if anything is missing or malformed.
 | `API_URL` | Base URL of the NestJS API (e.g. `http://localhost:8000`) |
 | `AUTH_SECRET` | NextAuth session encryption secret |
 | `INTERNAL_API_SECRET` | Same value as the API's — lets the API trust the visitor IP this server forwards. Leave empty in local dev |
-| `AUTH_URL` | The site's public URL (e.g. `https://learnora.example.com`). **Required in production** — without it (or `AUTH_TRUST_HOST=true` behind a trusted proxy) NextAuth rejects every session with `UntrustedHost` and nobody can log in |
+| `AUTH_URL` | The site's public URL (e.g. `https://learnora.example.com`). Not needed on Vercel (Auth.js reads the host itself); **required on other hosts** — without it (or `AUTH_TRUST_HOST=true` behind a trusted proxy) NextAuth rejects every session with `UntrustedHost` and nobody can log in |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth client credentials |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Same client ID, exposed to the browser for the connect-account button |
 | `NEXT_PUBLIC_OMISE_PUBLIC_KEY` | Opn Payments public key (`pkey_test_...`), used by Omise.js to tokenize cards in the browser |
@@ -273,13 +300,23 @@ User ──< Wishlist >── Course
 User ──< CartItem >── Course
 User ──< OneTimeCode
 User ──< Purchase ──< PurchaseItem >── Course
+User ──< RefreshToken
+User ──1 PayoutAccount
+User ──< Payout
 Course ──< Lesson ──< LessonProgress >── PurchaseItem
+PurchaseItem ──1 RefundRequest
 ```
 
 - **User** — `role` (regular user vs. admin), `isInstructor` (teaching
   capability), `status` (suspended flag), `emailVerifiedAt`, optional `password`
-  (null for Google-only accounts), optional `googleId`, `twoFactorEnabled`
-  and an optional instructor `bio` (edited on the profile page, shown on course pages).
+  (null for Google-only accounts), optional `googleId`, `twoFactorEnabled`,
+  `sessionVersion` (bumped to end every session), `termsAcceptedAt` /
+  `instructorTermsAcceptedAt`, and an optional instructor `bio` (edited on the
+  profile page, shown on course pages).
+- **RefreshToken** — sha256 hash of each refresh token, grouped into a family per
+  login, with rotation and revocation timestamps.
+- **LoginAttempt** — failed-login counters and lock times, keyed by hashed
+  email + IP and hashed email.
 - **EmailVerificationToken / PasswordResetToken** — single-use links. Only a
   sha256 hash of each token is stored, and `pendingEmail` holds the address
   waiting to be confirmed during an email change.
@@ -300,6 +337,10 @@ Course ──< Lesson ──< LessonProgress >── PurchaseItem
   tracks partial refunds; when it reaches the total the order becomes `REFUNDED`.
 - **LessonProgress** — per enrollment and lesson: last position, furthest watched
   second and completion flag.
+- **PayoutAccount** — an instructor's bank (`bankCode` from Opn's supported list,
+  `bankName`), account holder name and account number (encrypted).
+- **Payout** — a bank transfer an admin recorded: amount, reference and who
+  recorded it.
 
 Full definitions: [`api/prisma/schema.prisma`](api/prisma/schema.prisma).
 
@@ -313,7 +354,7 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 ### Auth — `/auth`
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/auth/register` | Register with email and password |
+| POST | `/auth/register` | Register with email and password (an existing email gets the same answer; its owner is emailed instead) |
 | POST | `/auth/login` | Log in, returns `access_token` + user, or `{ codeRequired, challengeId }` when 2FA is on |
 | POST | `/auth/login/code` | Finish a 2FA login with the 6-digit code |
 | POST | `/auth/login/code/resend` | Send a new login code (30-second cooldown) |
@@ -325,6 +366,11 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 | POST | `/auth/logout` | Revoke this device's refresh token |
 | POST | `/auth/forgot-password` | Request a password-reset link |
 | POST | `/auth/reset-password` | Set a new password with a reset token |
+
+### Health
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/health` | `{ "status": "ok" }` once the API and database respond (used by Render and the keep-awake pinger) |
 
 ### Users — `/users`
 | Method | Path | Description |
@@ -459,6 +505,7 @@ redirects to the login page.
    `googleId`, links Google to an existing account with the same email, or creates a
    new `STUDENT` account.
 4. The API returns its own access token, which is stored in the session as above.
+   If the API is still waking up, the web app retries the call instead of failing.
 
 **Email verification** — registration stores the account with `emailVerifiedAt`
 null and emails a link. Logging in with a password is refused until it is
@@ -491,7 +538,7 @@ emails cannot be enumerated.
 
 **Webhook in production** — in Opn Dashboard (live mode) → Webhooks, set the URL
 to `https://<your-api-host>/payments/opn/webhook`, copy the signing secret into
-`OMISE_WEBHOOK_SECRET`, and switch `OMISE_SECRET_KEY` (API) and
+`OMISE_WEBHOOK_SECRET` (required once the key is live), and switch `OMISE_SECRET_KEY` (API) and
 `NEXT_PUBLIC_OMISE_PUBLIC_KEY` (web) to the live `skey_...` / `pkey_...` keys.
 Test mode and live mode have separate webhooks and keys. For local testing,
 expose the API (e.g. with ngrok) and point a test-mode webhook at it. Without a
@@ -513,19 +560,28 @@ instructor's balance goes negative and is taken from the next payout.
   default; endpoints that send email (register, forgot password, resend codes)
   5/min; password and code checks 10/min; token refresh 30/min. The Opn webhook
   is exempt. Because the API is only called by the Next.js server, the web app
-  forwards the visitor's IP in `X-Forwarded-For` and the API trusts it only from
-  `TRUST_PROXY`.
+  forwards the visitor's IP: in production as `X-Client-IP` together with the
+  shared `INTERNAL_API_SECRET` (the API ignores the header without it), in local
+  development as `X-Forwarded-For`, trusted only from `TRUST_PROXY`.
 - **Login lockout** (stored in `login_attempts`, hashed keys): 5 wrong passwords
   from the same email + IP lock that device for 15 minutes, so someone else can't
   lock you out from their machine; 30 failures across all IPs lock the account.
-- **Uploads**: images (JPG/PNG/WebP/GIF, no SVG) up to 15 MB, lesson videos up to
-  100 MB, checked before the file is read into memory; Cloudinary re-checks image
-  formats.
+- **Uploads**: images (JPG/PNG/WebP/GIF, no SVG) up to 15 MB, checked before the
+  file is read into memory; Cloudinary re-checks image formats. Lesson videos
+  (up to 100 MB) never pass through our servers: the API signs a one-file upload
+  ticket that fixes the storage path (`lessons/<instructor>/<uuid>`) and the
+  authenticated delivery type, then, when the lesson is saved, reads the asset
+  from Cloudinary itself to check the owner, the size, that it is a playable
+  video and that no other lesson uses it.
+- **Redirects**: return paths sent from the browser (cart, wishlist) are limited
+  to in-site paths, so a crafted link can't send users to another site.
 - **Bank account numbers** are encrypted at rest (`PAYOUT_ENCRYPTION_KEY`).
-- **Headers**: the web app sends a Content-Security-Policy (only Opn, Google
-  Identity Services and Cloudinary are allowed as external sources — add new
-  services in `src/lib/security-headers.ts`), `X-Frame-Options: DENY`, nosniff,
-  and HSTS in production; the API uses `helmet`.
+- **Headers**: the web app sends a Content-Security-Policy (only Opn — including
+  the S3 bucket that serves PromptPay QR images — Google Identity Services and
+  Cloudinary — including `api.cloudinary.com` for video uploads and signed
+  playback links — are allowed as external sources; add new services in
+  `src/lib/security-headers.ts`), `X-Frame-Options: DENY`, nosniff, and HSTS in
+  production; the API uses `helmet`.
 - **Tokens in the browser**: `/api/auth/session` strips the API access token, so
   injected scripts can't read it; server code still gets it through `auth()`.
 
