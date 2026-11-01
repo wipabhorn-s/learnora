@@ -4,17 +4,28 @@ import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 
 /**
- * ให้ hosting (Render) เช็กว่า API พร้อมรับคำขอแล้ว: ต่อฐานข้อมูลได้ด้วย ไม่ใช่แค่ process ยังไม่ตาย
- * ไม่ตอบข้อมูลภายในใด ๆ
+ * เช็กสุขภาพ API ไม่ตอบข้อมูลภายในใด ๆ
+ *
+ * GET /health ไม่แตะฐานข้อมูลโดยตั้งใจ: Render เรียกเป็นระยะและตัว ping กันหลับเรียกทุก 10 นาที
+ * ถ้าแตะฐานข้อมูลทุกครั้ง Neon (แพ็กเกจฟรี) จะไม่ได้หลับเลยจนโควตารายเดือนหมดกลางเดือน
+ * แล้วเว็บใช้ไม่ได้ทั้งเว็บ ส่วนการ deploy ที่ต่อฐานข้อมูลไม่ได้ยังถูกกันไว้ เพราะตอน start
+ * รัน `prisma migrate deploy` ก่อน ซึ่งล้มถ้าต่อไม่ได้
  */
 @Public()
-@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** API ยังทำงานอยู่ (ใช้กับ Render health check และตัว ping) */
+  @SkipThrottle()
   @Get()
-  async check() {
+  check() {
+    return { status: 'ok' };
+  }
+
+  /** เช็กว่าต่อฐานข้อมูลได้ด้วย ไว้เรียกเองหรือตั้ง cron ห่าง ๆ (ปลุกฐานข้อมูลทุกครั้งที่เรียก) */
+  @Get('db')
+  async checkDatabase() {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
     } catch {

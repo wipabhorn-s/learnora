@@ -370,7 +370,8 @@ All routes are protected by a global `AuthGuard` + `RolesGuard` unless marked
 ### Health
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/health` | `{ "status": "ok" }` once the API and database respond (used by Render and the keep-awake pinger) |
+| GET | `/health` | `{ "status": "ok" }` while the API is running. Does **not** touch the database, so Render's health check and the keep-awake pinger don't keep Neon awake and use up its free monthly compute |
+| GET | `/health/db` | `{ "status": "ok" }` once the database also responds, `503` if it doesn't. Wakes the database on every call, so call it by hand or at most a few times a day |
 
 ### Users — `/users`
 | Method | Path | Description |
@@ -687,9 +688,11 @@ mode) accounts. `render.yaml` at the repo root creates the API service.
 `OMISE_WEBHOOK_SECRET` on the API service.
 
 **6. Keep the API awake** — create a free job at cron-job.org (or UptimeRobot)
-that requests `<API URL>/health` every 10 minutes.
+that requests `<API URL>/health` every 10 minutes. Use `/health`, not
+`/health/db`: pinging the database every 10 minutes keeps Neon from ever
+suspending, and its free compute runs out around mid-month.
 
-**7. Check** — open `<API URL>/health` (should say `{"status":"ok"}`), then
+**7. Check** — open `<API URL>/health/db` (should say `{"status":"ok"}`), then
 sign up on the web app, verify the email, upload a lesson video, and buy a
 course with a test card.
 

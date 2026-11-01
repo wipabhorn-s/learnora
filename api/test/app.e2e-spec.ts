@@ -55,9 +55,16 @@ describe('Learnora API (e2e)', () => {
       .expect(404);
   });
 
-  it('GET /health reports ok when the database is reachable (no login needed)', async () => {
+  it('GET /health reports ok without logging in', async () => {
     const response = await request(app.getHttpServer())
       .get('/health')
+      .expect(200);
+    expect(response.body).toEqual({ status: 'ok' });
+  });
+
+  it('GET /health/db reports ok when the database is reachable', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/health/db')
       .expect(200);
     expect(response.body).toEqual({ status: 'ok' });
   });
