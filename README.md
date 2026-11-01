@@ -48,10 +48,12 @@ if it has been idle, the first page may take up to a minute while it wakes up.
 - Profile: edit personal info, upload/remove avatar
 
 ### Instructor
-- Create, edit, publish and delete courses (thumbnail upload via Cloudinary)
+- Create, edit, publish and delete courses (thumbnail upload via Cloudinary). A course
+  that students have paid for can't be deleted, only unpublished
 - Manage lessons: add, edit, reorder, delete. Videos upload from the browser
   straight to Cloudinary with a progress bar (signed, one-file upload tickets)
-- Instructor dashboard: revenue, students and course performance
+- Instructor dashboard: total courses, students and revenue, plus the latest enrollments
+  (student, course, price and date)
 - **Earnings**: 70% revenue share, pending vs. available balance (after the
   14-day refund window) and payout history; save a payout bank account picked
   from the banks Opn supports (search in English, Thai or by bank code)
