@@ -537,8 +537,12 @@ emails cannot be enumerated.
    mobile banking return an authorize URL. The web app then shows `/checkout/pending`.
    Opn's minimum charge is ฿20.
 3. The purchase is settled from three places — the pending page polling
-   `/purchases/:id/progress`, the `charge.complete` webhook, and a reconcile job that
-   runs every 2 minutes. Each one **asks Opn for the charge status itself** instead
+   `/purchases/:id/progress`, the `charge.complete` webhook, and a reconcile job.
+   The job checks every 2 minutes while a payment is pending, every 30 minutes while
+   it only watches cancelled orders that could still be paid late, and doesn't touch
+   the database at all when nothing is open, so Neon can suspend (a database query
+   every 2 minutes would keep it awake and use up the free monthly compute).
+   A new checkout or cancellation wakes it up again. Each one **asks Opn for the charge status itself** instead
    of trusting the caller, and every step is idempotent, so courses are never
    unlocked or refunded twice.
 4. Starting a new checkout cancels the previous pending one. If that old charge is
@@ -642,7 +646,7 @@ mode) accounts. `render.yaml` at the repo root creates the API service.
 > awake (about 744 hours a month) and visitors never wait for a cold start.
 > Without the pinger the API sleeps after 15 minutes without traffic and the
 > first request after that waits about a minute (the web app retries until it
-> is up). While the API sleeps, the 2-minute payment reconcile job pauses too.
+> is up). While the API sleeps, the payment reconcile job pauses too.
 >
 > Vercel's free Hobby plan is for non-commercial projects (demo / portfolio).
 > Lesson videos go from the browser straight to Cloudinary, so Vercel's 4.5 MB

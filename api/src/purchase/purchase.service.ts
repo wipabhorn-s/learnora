@@ -103,6 +103,17 @@ export class PurchaseService {
     this.frontendUrl = configService.get('FRONTEND_URL', { infer: true });
   }
 
+  /**
+   * เวลาล่าสุดที่เครื่องนี้เริ่มหรือยกเลิกการชำระเงิน (ms) รอบตรวจทานดูค่านี้
+   * เพื่อรู้ว่าต้องตื่นมาเช็กฐานข้อมูล ค่าเริ่มต้นคือเวลาเปิดเครื่อง
+   * จะได้ตรวจรายการที่ค้างจากก่อนรีสตาร์ตหนึ่งรอบ
+   */
+  lastPaymentActivityAt = Date.now();
+
+  private notePaymentActivity() {
+    this.lastPaymentActivityAt = Date.now();
+  }
+
   async checkout(
     studentId: string,
     dto: CheckoutDto,
@@ -237,6 +248,8 @@ export class PurchaseService {
         select: { id: true },
       });
     });
+    // มีรายการใหม่รอจ่าย (และอาจมีรายการเดิมถูกยกเลิก) ให้รอบตรวจทานตื่นมาเฝ้า
+    this.notePaymentActivity();
 
     if (amount === 0) {
       await this.finalize(purchase.id);
@@ -316,7 +329,11 @@ export class PurchaseService {
       return purchase.id;
     });
 
-    if (purchaseId) await this.finalize(purchaseId);
+    if (purchaseId) {
+      // finalize ล้มกลางทาง = รายการค้าง PENDING ให้รอบตรวจทานปิดให้
+      this.notePaymentActivity();
+      await this.finalize(purchaseId);
+    }
     return { courseId, enrolled: true };
   }
 
@@ -392,14 +409,19 @@ export class PurchaseService {
         }),
       },
     });
+    this.notePaymentActivity();
     await this.applyCharge(orphan.id, charge);
   }
 
   /**
    * รอบตรวจทาน (PaymentReconcileService เรียกเป็นระยะ) ปิดช่องโหว่ที่ webhook
    * มาไม่ถึง เช่น รันในเครื่อง, server ล่มตอน Opn ส่งมา, ผู้ใช้ปิดหน้าเว็บ
+   *
+   * ตอบจำนวนงานที่ยังเหลือหลังรอบนี้ ให้ PaymentReconcileService เลือกว่ารอบถัดไป
+   * ต้องมาเร็วแค่ไหน: pending = รายการที่ยังรอจ่าย (ต้องเฝ้าถี่),
+   * watching = รายการยกเลิกแล้วที่อาจถูกจ่ายทีหลัง (เฝ้าห่าง ๆ ได้)
    */
-  async reconcile() {
+  async reconcile(): Promise<{ pending: number; watching: number }> {
     const now = Date.now();
 
     const [stalePending, cancelledOpen] = await Promise.all([
@@ -439,6 +461,20 @@ export class PurchaseService {
       take: 50,
     });
     for (const orphan of orphans) await this.markFailed(orphan.id);
+
+    const [pending, watching] = await Promise.all([
+      this.prisma.purchase.count({
+        where: { paymentStatus: PaymentStatus.PENDING },
+      }),
+      this.prisma.purchase.count({
+        where: {
+          paymentStatus: PaymentStatus.FAILED,
+          chargeId: { not: null },
+          cancelledAt: { gte: new Date(now - LATE_PAYMENT_WINDOW_MS) },
+        },
+      }),
+    ]);
+    return { pending, watching };
   }
 
   private async settleStudentPending(studentId: string) {
