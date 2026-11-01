@@ -30,7 +30,8 @@ if it has been idle, the first page may take up to a minute while it wakes up.
 ## Features
 
 ### Student
-- Browse and search courses with filters (category, level, price, keyword) and pagination
+- Browse and search courses by keyword, with filters (category, level, access type),
+  sorting (newest, price low–high, price high–low) and pagination
 - Course page with learning outcomes, requirements, curriculum and instructor bio
 - Public instructor profiles listing their published courses
 - Wishlist and shopping cart
@@ -59,7 +60,8 @@ if it has been idle, the first page may take up to a minute while it wakes up.
 ### Admin / Super admin
 - Admin dashboard with platform-wide statistics
 - Manage users (suspend / re-activate accounts)
-- Moderate courses (publish, suspend, delete)
+- Moderate courses: suspend a published course and lift the suspension (publishing,
+  unpublishing and deleting stay with the course's instructor)
 - Revenue chart and recent payments on the dashboard
 - Review payments (filter by status, date range, "refund needed")
 - **Refund Requests** queue (one course per request): approve (partial refund
@@ -299,12 +301,16 @@ User ──< Course (as instructor)
 User ──< Wishlist >── Course
 User ──< CartItem >── Course
 User ──< OneTimeCode
+User ──< EmailVerificationToken
+User ──< PasswordResetToken
 User ──< Purchase ──< PurchaseItem >── Course
 User ──< RefreshToken
 User ──1 PayoutAccount
 User ──< Payout
 Course ──< Lesson ──< LessonProgress >── PurchaseItem
 PurchaseItem ──1 RefundRequest
+Purchase ──< RefundRequest
+User ──< RefundRequest (as student, and as the admin who reviewed it)
 ```
 
 - **User** — `role` (regular user vs. admin), `isInstructor` (teaching
@@ -320,7 +326,8 @@ PurchaseItem ──1 RefundRequest
 - **EmailVerificationToken / PasswordResetToken** — single-use links. Only a
   sha256 hash of each token is stored, and `pendingEmail` holds the address
   waiting to be confirmed during an email change.
-- **OneTimeCode** — 6-digit email codes for 2FA (`LOGIN`, `ENABLE_TWO_FACTOR`).
+- **OneTimeCode** — 6-digit email codes for 2FA logins (`LOGIN`), turning 2FA on
+  (`ENABLE_TWO_FACTOR`) and deleting an account that has no password (`DELETE_ACCOUNT`).
   Stored as an HMAC keyed by the server secret, valid for 10 minutes, single-use,
   and locked after 5 wrong attempts.
 - **Course** — category, level, price, access type (`LIFETIME` / `LIMITED` with a
