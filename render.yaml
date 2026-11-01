@@ -19,6 +19,8 @@ services:
     buildCommand: corepack pnpm install --frozen-lockfile --prod=false && corepack pnpm exec prisma generate && corepack pnpm build
     # migrate ก่อนเปิดรับคำขอ (แพ็กเกจฟรีไม่มี pre-deploy command) เรียกโปรแกรมตรงจาก node_modules
     startCommand: ./node_modules/.bin/prisma migrate deploy && node dist/main
+    # /health ไม่แตะฐานข้อมูล ไม่อย่างนั้น Neon ไม่ได้หลับจนโควตาฟรีหมดกลางเดือน
+    # (เช็กฐานข้อมูลเองได้ที่ /health/db)
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
