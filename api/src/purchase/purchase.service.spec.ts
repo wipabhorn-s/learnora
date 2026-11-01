@@ -49,6 +49,7 @@ function makePrisma() {
       update: jest.fn(),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       create: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
     },
     purchaseItem: {
       findUnique: jest.fn(),
@@ -345,6 +346,40 @@ describe('PurchaseService — checkout guards', () => {
       response: expect.objectContaining({ code: 'PAYMENT_PENDING' }) as unknown,
     });
     expect(opn.createCharge).not.toHaveBeenCalled();
+  });
+
+  it('wakes the reconcile job once a paid order is created, even if Opn then fails', async () => {
+    const { service, prisma, opn } = givenCart(990);
+    prisma.purchase.create.mockResolvedValue({ id: PURCHASE_ID });
+    opn.createCharge.mockRejectedValue(new Error('Opn is down'));
+    service.lastPaymentActivityAt = 0;
+
+    await expect(
+      service.checkout(STUDENT_ID, { method: PaymentMethod.CARD }),
+    ).rejects.toThrow('Opn is down');
+    expect(service.lastPaymentActivityAt).toBeGreaterThan(0);
+  });
+});
+
+describe('PurchaseService — reconcile reports what is left to watch', () => {
+  it('returns the pending and watched counts so the job can sleep when both are 0', async () => {
+    const { service, prisma } = setup();
+    prisma.purchase.count
+      .mockResolvedValueOnce(2) // ยังรอจ่าย
+      .mockResolvedValueOnce(1); // ยกเลิกแล้วแต่ยังอาจถูกจ่าย
+
+    await expect(service.reconcile()).resolves.toEqual({
+      pending: 2,
+      watching: 1,
+    });
+  });
+
+  it('reports nothing left when there are no open orders', async () => {
+    const { service } = setup();
+    await expect(service.reconcile()).resolves.toEqual({
+      pending: 0,
+      watching: 0,
+    });
   });
 });
 
